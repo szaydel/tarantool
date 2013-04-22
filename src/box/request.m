@@ -38,6 +38,8 @@
 #include <fiber.h>
 #include <rope.h>
 
+RLIST_HEAD(request_executers);
+
 STRS(requests, REQUESTS);
 STRS(update_op_codes, UPDATE_OP_CODES);
 
@@ -821,7 +823,7 @@ request_create(u32 type, const void *data, u32 len)
 	return request;
 }
 
-void
+int
 request_execute(struct request *request, struct txn *txn, struct port *port)
 {
 	switch (request->type) {
@@ -846,4 +848,6 @@ request_execute(struct request *request, struct txn *txn, struct port *port)
 		request_check_type(request->type);
 		break;
 	}
+
+	return 0;
 }

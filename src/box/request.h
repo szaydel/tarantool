@@ -109,6 +109,48 @@ struct request
 
 struct request *request_create(u32 type, const void *data, u32 len);
 
-void request_execute(struct request *request, struct txn *txn, struct port *port);
+/**
+* @param request
+* @param txn
+* @param port
+*
+* @return 0  if request was processed
+* @return !0 if request can't be processed by the function
+*/
+int request_execute(struct request *request, struct txn *txn, struct port *port);
+
+
+typedef
+int(*request_execute_handler)(struct request *, struct txn *, struct port *);
+
+#include <rlist.h>
+
+struct request_trigger {
+	request_execute_handler handle;
+	struct rlist list;
+	int order;
+};
+
+
+extern struct rlist request_executers;
+
+static inline void
+add_request_trigger(struct request_trigger *t)
+{
+	struct request_trigger *i;
+	rlist_foreach_entry(i, &request_executers, list) {
+		if (i->order > t->order) {
+			rlist_add_tail_entry(&i->list, t, list);
+			return;
+		}
+	}
+	rlist_add_tail_entry(&request_executers, t, list);
+}
+
+
+#define RLT_LAST	(1000000)
+#define RLT_USER	(0)
+#define RLT_FIRST	(-1000000)
+
 
 #endif /* TARANTOOL_BOX_REQUEST_H_INCLUDED */

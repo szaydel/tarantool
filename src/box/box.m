@@ -84,7 +84,21 @@ process_rw(struct port *port, u32 op, const void *reqdata, u32 reqlen)
 	@try {
 		struct request *request = request_create(op, reqdata, reqlen);
 		stat_collect(stat_base, op, 1);
-		request_execute(request, txn, port);
+
+
+/*                 request_execute(request, txn, port); */
+		struct request_trigger *tg;
+		int hres = -1;
+
+		rlist_foreach_entry(tg, &request_executers, list) {
+			hres = tg->handle(request, txn, port);
+			if (hres == 0)
+				break;
+		}
+
+		assert(hres == 0);
+
+
 		txn_commit(txn);
 		port_send_tuple(port, txn, request->flags);
 		port_eof(port);
@@ -434,6 +448,14 @@ box_free(void)
 void
 box_init(void)
 {
+
+	static struct request_trigger local_executer = {
+		.handle = request_execute,
+		.order  = RLT_LAST
+	};
+	add_request_trigger(&local_executer);
+
+
 	title("loading");
 	atexit(box_free);
 
