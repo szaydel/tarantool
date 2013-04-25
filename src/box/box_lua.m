@@ -47,6 +47,8 @@
 #include "port.h"
 #include "tbuf.h"
 
+#include "request.h"
+
 /* contents of box.lua */
 extern const char box_lua[];
 
@@ -1730,13 +1732,97 @@ lbox_unpack(struct lua_State *L)
 #undef CHECK_SIZE
 }
 
+
+static int
+lbox_on_request_skip(struct lua_State *L)
+{
+	int *skip = lua_touserdata(L, lua_upvalueindex(1));
+	*skip = 1;
+	return 0;
+}
+
+static int
+lbox_on_request_trigger(struct request *request,
+	struct txn *txn, struct port *port, void *data)
+{
+	(void)txn;
+
+	int ref = (int)(size_t)data;
+	lua_State *L = lua_newthread(tarantool_L);
+
+	int coro_ref = luaL_ref(tarantool_L, LUA_REGISTRYINDEX);
+
+	lua_rawgeti(tarantool_L, LUA_REGISTRYINDEX, ref);
+	lua_xmove(tarantool_L, L, 1);
+
+	@try {
+		int skip = 0;
+
+		/* request is the first argument */
+		lua_pushlstring(L, request->data, request->len);
+
+		lua_pushlightuserdata(L, &skip);
+		lua_pushcclosure(L, lbox_on_request_skip, 1);
+
+		lua_call(L, 2, LUA_MULTRET);
+
+		if (skip) {
+			lua_settop(L, 0);
+			return 1;
+		} else {
+			port_add_lua_multret(port, L);
+			return 0;
+		}
+	} @catch(tnt_Exception *e) {
+		@throw;
+	} @catch(id allOthers) {
+		tnt_raise(ClientError, :ER_PROC_LUA, lua_tostring(L, -1));
+	} @finally {
+		luaL_unref(tarantool_L, LUA_REGISTRYINDEX, coro_ref);
+	}
+
+
+
+	return 1;
+}
+
+static int
+lbox_on_request(struct lua_State *L)
+{
+	if (lua_gettop(L) != 1)
+		luaL_error(L, "box.on_request(): bad arguments");
+	if (!lua_isfunction(L, -1))
+		luaL_error(L, "box.on_request(): argument must be a function");
+
+	size_t ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	int id = add_request_trigger(RT_USER,
+			lbox_on_request_trigger, (void *)ref);
+	lua_pushinteger(L, id);
+	return 1;
+}
+
+
+static int
+lbox_remove_on_request(struct lua_State *L)
+{
+	int id = lua_tonumber(L, -1);
+	if (remove_request_trigger(id))
+		lua_pushboolean(L, 1);
+	else
+		lua_pushboolean(L, 0);
+	return 1;
+}
+
 static const struct luaL_reg boxlib[] = {
-	{"process", lbox_process},
-	{"raise", lbox_raise},
-	{"pack", lbox_pack},
-	{"unpack", lbox_unpack},
+	{"process",		lbox_process},
+	{"raise",		lbox_raise},
+	{"pack",		lbox_pack},
+	{"unpack",		lbox_unpack},
+	{"on_request",		lbox_on_request},
+	{"remove_on_request",	lbox_remove_on_request},
 	{NULL, NULL}
 };
+
 
 void
 mod_lua_init(struct lua_State *L)

@@ -1,0 +1,17 @@
+# encoding: tarantool
+
+exec admin "lua box.insert(0, 1, 'te-test')"
+
+exec admin "lua box.on_request()"
+exec admin "lua box.on_request(123)"
+exec admin "lua id = box.on_request(function(...) error('exception') end) "
+exec admin "lua box.select(0, 0, 1)"
+exec admin "lua box.remove_on_request(id)"
+exec admin "lua box.remove_on_request(id)"
+exec admin "lua box.select(0, 0, 1)"
+exec admin "lua id = box.on_request(function(req, skip) skip() end) "
+exec admin "lua box.select(0, 0, 1)"
+exec admin "lua box.remove_on_request(id)"
+
+exec admin "lua box.on_request(function(req, skip) return { 1, 're-test' } end)"
+exec admin "lua box.select(0, 0, 1)"

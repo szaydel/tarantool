@@ -37,8 +37,103 @@
 #include <pickle.h>
 #include <fiber.h>
 #include <rope.h>
+#include <rlist.h>
 
-RLIST_HEAD(request_executers);
+static RLIST_HEAD(executers);
+
+struct request_trigger {
+	struct rlist list;
+	request_execute_handler handler;
+	int type;
+	int id;
+	void *data;
+};
+
+/**
+* add_request_trigger - add new request trigger
+* @param type - type of trigger (RT_SYSTEM_LAST, RT_SYSTEM_FIRST, RT_USER)
+* @return trigger_id
+*/
+int
+add_request_trigger(int type, request_execute_handler handler, void *data)
+{
+	static int id = 0;
+	int id_found;
+
+	do {
+		id_found = 1;
+		struct request_trigger *t;
+		rlist_foreach_entry(t, &executers, list) {
+			if (id == t->id) {
+				id_found = 0;
+				id++;
+				break;
+			}
+		}
+	} while (!id_found);
+
+	struct request_trigger *t = malloc(sizeof(struct request_trigger));
+
+	if (!t) {
+		tnt_raise(LoggedError,
+			:ER_MEMORY_ISSUE, sizeof(struct request_trigger),
+				"request_trigger", "add");
+	}
+
+	t->type		= type;
+	t->handler	= handler;
+	t->id		= id;
+	t->data		= data;
+
+
+	switch(type) {
+		case RT_SYSTEM_LAST:
+			rlist_add_tail_entry(&executers, t, list);
+			break;
+		case RT_SYSTEM_FIRST:
+			rlist_add_entry(&executers, t, list);
+			break;
+
+		case RT_USER: {
+			struct request_trigger *i;
+			rlist_foreach_entry_reverse(i, &executers, list) {
+				if (i->type != RT_SYSTEM_LAST) {
+					rlist_add_entry(&i->list, t, list);
+					return id;
+				}
+			}
+			rlist_add_entry(&executers, t, list);
+			break;
+		}
+
+		default:
+			panic("Unknown request_trigger type");
+	}
+
+	return id;
+}
+
+/**
+* remove_request_trigger - remove request trigger by trigger_id
+* @param trigger_id
+*/
+int
+remove_request_trigger(int trigger_id)
+{
+	int count = 0;
+	struct request_trigger *t;
+	rlist_foreach_entry(t, &executers, list) {
+		if (t->id != trigger_id)
+			continue;
+
+		rlist_del_entry(t, list);
+		free(t);
+		count++;
+		break;
+	}
+	return count;
+}
+
 
 STRS(requests, REQUESTS);
 STRS(update_op_codes, UPDATE_OP_CODES);
@@ -823,8 +918,9 @@ request_create(u32 type, const void *data, u32 len)
 	return request;
 }
 
-int
-request_execute(struct request *request, struct txn *txn, struct port *port)
+static int
+local_request_execute(struct request *request,
+				struct txn *txn, struct port *port, void *data)
 {
 	switch (request->type) {
 	case REPLACE:
@@ -849,5 +945,28 @@ request_execute(struct request *request, struct txn *txn, struct port *port)
 		break;
 	}
 
+	(void)data;
 	return 0;
+}
+
+void
+request_execute(struct request *request, struct txn *txn, struct port *port)
+{
+	struct request_trigger *t;
+	int res = -1;
+	rlist_foreach_entry(t, &executers, list) {
+		res = t->handler(request, txn, port, t->data);
+		if (res == 0)
+			return;
+	}
+	assert(res == 0);
+}
+
+/**
+* request_init - init request system
+*/
+void
+request_init(void)
+{
+	add_request_trigger(RT_SYSTEM_LAST, local_request_execute, NULL);
 }

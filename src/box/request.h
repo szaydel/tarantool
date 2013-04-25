@@ -109,48 +109,41 @@ struct request
 
 struct request *request_create(u32 type, const void *data, u32 len);
 
-/**
-* @param request
-* @param txn
-* @param port
-*
-* @return 0  if request was processed
-* @return !0 if request can't be processed by the function
-*/
-int request_execute(struct request *request, struct txn *txn, struct port *port);
+void request_execute(struct request *request, struct txn *txn, struct port *port);
 
 
+
+/* request triggers */
 typedef
-int(*request_execute_handler)(struct request *, struct txn *, struct port *);
+int(*request_execute_handler)
+	(struct request *, struct txn *, struct port *, void *);
 
-#include <rlist.h>
-
-struct request_trigger {
-	request_execute_handler handle;
-	struct rlist list;
-	int order;
+enum {
+	RT_SYSTEM_LAST,
+	RT_SYSTEM_FIRST,
+	RT_USER
 };
 
-
-extern struct rlist request_executers;
-
-static inline void
-add_request_trigger(struct request_trigger *t)
-{
-	struct request_trigger *i;
-	rlist_foreach_entry(i, &request_executers, list) {
-		if (i->order > t->order) {
-			rlist_add_tail_entry(&i->list, t, list);
-			return;
-		}
-	}
-	rlist_add_tail_entry(&request_executers, t, list);
-}
+/**
+* add_request_trigger - add new request trigger
+* @param type - type of trigger (RT_SYSTEM_LAST, RT_SYSTEM_FIRST, RT_USER)
+* @return trigger_id
+*/
+int add_request_trigger(int type, request_execute_handler handler, void *udata);
 
 
-#define RLT_LAST	(1000000)
-#define RLT_USER	(0)
-#define RLT_FIRST	(-1000000)
+/**
+* remove_request_trigger - remove request trigger by trigger_id
+* @param trigger_id
+* @return count of removed triggers
+*/
+int remove_request_trigger(int trigger_id);
+
+
+/**
+* request_init - init request system
+*/
+void request_init(void);
 
 
 #endif /* TARANTOOL_BOX_REQUEST_H_INCLUDED */
