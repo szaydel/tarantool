@@ -1,0 +1,227 @@
+lua box.insert(0, 1, 'te-test')
+---
+ - 1: {'te-test'}
+...
+lua box.select(0, 0, 1)
+---
+ - 1: {'te-test'}
+...
+lua box.on_request()
+---
+error: 'box.on_request(): bad arguments'
+...
+lua box.on_request(123)
+---
+error: 'box.on_request(): argument must be a function'
+...
+lua id = box.on_request(function(...) error('exception') end) 
+---
+...
+lua box.select(0, 0, 1)
+---
+error: 'Lua error: [string "id = box.on_request(function(...) error(''exce..."]:1: exception'
+...
+lua box.remove_on_request(id)
+---
+ - true
+...
+lua box.remove_on_request(id)
+---
+ - false
+...
+lua box.select(0, 0, 1)
+---
+ - 1: {'te-test'}
+...
+lua id = box.on_request(function(req, skip) skip() end)
+---
+...
+lua box.select(0, 0, 1)
+---
+ - 1: {'te-test'}
+...
+lua box.remove_on_request(id)
+---
+ - true
+...
+lua id = box.on_request(function(req, skip) return { 1, 're-test' } end)
+---
+...
+lua box.select(0, 0, 1)
+---
+ - 1: {'re-test'}
+...
+lua box.remove_on_request(id)
+---
+ - true
+...
+lua id = box.on_request(function(req, skip) return req.type end)
+---
+...
+lua box.select(23, 12, 1)
+---
+ - 'select': {}
+...
+lua box.delete(24, 12, 1)
+---
+ - 'delete': {}
+...
+lua box.update(25, 12, '=p', 1, 2)
+---
+ - 'update': {}
+...
+lua box.insert(26, 2, 2, 3)
+---
+ - 'replace': {}
+...
+lua box.replace(27, 2, 2, 3)
+---
+ - 'replace': {}
+...
+lua box.remove_on_request(id)
+---
+ - true
+...
+lua id = box.on_request(function(req, skip) return req.space end)
+---
+...
+lua box.select(23, 12, 1)
+---
+ - 23: {}
+...
+lua box.delete(24, 12, 1)
+---
+ - 24: {}
+...
+lua box.update(25, 12, '=p', 1, 2)
+---
+ - 25: {}
+...
+lua box.insert(26, 2, 2, 3)
+---
+ - 26: {}
+...
+lua box.replace(27, 2, 2, 3)
+---
+ - 27: {}
+...
+lua box.remove_on_request(id)
+---
+ - true
+...
+lua id = box.on_request(function(req, skip) return req.flags end)
+---
+...
+lua box.select(23, 12, 1)
+---
+ - 'nil': {}
+...
+lua box.delete(24, 12, 1)
+---
+ - 1: {}
+...
+lua box.update(25, 12, '=p', 1, 2)
+---
+ - 1: {}
+...
+lua box.insert(26, 2, 2, 3)
+---
+ - 3: {}
+...
+lua box.replace(27, 2, 2, 3)
+---
+ - 1: {}
+...
+lua box.remove_on_request(id)
+---
+ - true
+...
+lua id = box.on_request(function(req, skip) return req.key end)
+---
+...
+lua box.select(23, 12, 1)
+---
+ - 'nil': {}
+...
+lua box.delete(24, 12, 1)
+---
+ - 12: {1}
+...
+lua box.update(25, 12, '=p', 1, 2)
+---
+ - 12: {}
+...
+lua box.insert(26, 2, 2, 3)
+---
+ - 2: {2, 3}
+...
+lua box.replace(27, 2, 2, 3)
+---
+ - 2: {2, 3}
+...
+lua box.remove_on_request(id)
+---
+ - true
+...
+lua id = box.on_request(function(req, skip) return unpack(req.keys) end)
+---
+...
+lua box.select(23, 12, 1)
+---
+ - 1: {}
+...
+lua box.remove_on_request(id)
+---
+ - true
+...
+lua id = box.on_request(function(req, skip) return req.index end)
+---
+...
+lua box.select(23, 12, 1)
+---
+ - 12: {}
+...
+lua box.remove_on_request(id)
+---
+ - true
+...
+lua id = box.on_request(function(req, skip) return req.offset end)
+---
+...
+lua box.select(23, 12, 1)
+---
+ - 0: {}
+...
+lua box.remove_on_request(id)
+---
+ - true
+...
+lua id = box.on_request(function(req, skip) return req.limit end)
+---
+...
+lua box.select(23, 12, 1)
+---
+ - 4294967295: {}
+...
+lua box.remove_on_request(id)
+---
+ - true
+...
+lua id = box.on_request(function(req, skip) return req.format end)
+---
+...
+lua box.update(23, 12, '=p!p#p', 11, 2, 12, 3, 34, 4)
+---
+ - '=p!p#p': {}
+...
+lua box.remove_on_request(id)
+---
+ - true
+...
+lua id = box.on_request(function(req, skip) return req.opargs end)
+---
+...
+lua box.update(23, 12, '=p!p#p&p:p', 11, 2, 12, 3, 34, 4, 22, 21, 27, box.pack('ppp', 223, 3332, 'abc'))
+---
+ - 11: {2, 12, 3, 34, '', 22, 21, 27, '\x0E\x04\xDF\x00\x00\x00\x04\x04\x0D\x00\x00\x03abc'}
+...

@@ -1742,289 +1742,311 @@ lbox_on_request_skip(struct lua_State *L)
 }
 
 
-static void
-lbox_push_request(struct lua_State *L, struct request *request)
+static int
+lbox_request_index(struct lua_State *L)
 {
+	const char *s;
+	uint32_t l, i, j, count, fcount;
+
+	lua_pushstring(L, "raw");
+	lua_gettable(L, 1);
+	struct request *request = lua_touserdata(L, -1);
+	lua_pop(L, 1);
+
 	typeof(request->data) data	= request->data;
 	const void **reqpos		= &data;
 	const void *reqend		= request->data + request->len;
 
-	int i, j, count, fcount;
-	const char *s;
-	uint32_t l;
-	char *ops;
-
-	lua_newtable(L);
-
-	switch(request->type) {
-	case REPLACE:
-		lua_pushstring(L, "type");
-		lua_pushstring(L, "replace");
-		lua_settable(L, -3);
-		goto DRB;
-	case DELETE_1_3:
-		lua_pushstring(L, "type");
-		lua_pushstring(L, "delete13");
-		lua_settable(L, -3);
-		goto DRB;
-	case DELETE:
-		lua_pushstring(L, "type");
-		lua_pushstring(L, "delete");
-		lua_settable(L, -3);
-	DRB:
-		lua_pushstring(L, "space");
-		lua_pushnumber(L, pick_u32(reqpos, reqend) );
-		lua_settable(L, -3);
-
-		if (request->type != DELETE_1_3)
-			pick_u32(reqpos, reqend); // flags
-
-		fcount = pick_u32(reqpos, reqend);
-
-		lua_pushstring(L, "key");
-		lua_newtable(L);
-
-		for (i = 0; i < fcount; i++) {
-			s = pick_field_str(reqpos, reqend, &l);
-			lua_pushnumber(L, i + 1);
-			lua_pushlstring(L, s, l);
-			lua_settable(L, -3);
+	const char *key = lua_tostring(L, 2);
+	if (strcmp(key, "type") == 0) {
+		switch(request->type) {
+			case REPLACE:
+				lua_pushvalue(L, 2);
+				lua_pushstring(L, "replace");
+				lua_rawset(L, 1);
+				break;
+			case DELETE_1_3:
+				lua_pushvalue(L, 2);
+				lua_pushstring(L, "delete13");
+				lua_rawset(L, 1);
+				break;
+			case DELETE:
+				lua_pushvalue(L, 2);
+				lua_pushstring(L, "delete");
+				lua_rawset(L, 1);
+				break;
+			case SELECT:
+				lua_pushvalue(L, 2);
+				lua_pushstring(L, "select");
+				lua_rawset(L, 1);
+				break;
+			case UPDATE:
+				lua_pushvalue(L, 2);
+				lua_pushstring(L, "update");
+				lua_rawset(L, 1);
+				break;
+			case CALL:
+				lua_pushvalue(L, 2);
+				lua_pushstring(L, "call");
+				lua_rawset(L, 1);
+				break;
+			default:
+				luaL_error(L, "unknown request type: %d",
+					request->type);
+				break;
 		}
-		lua_settable(L, -3);
-
-		break;
-
-	case SELECT:
-		lua_pushstring(L, "type");
-		lua_pushstring(L, "select");
-		lua_settable(L, -3);
-
-		lua_pushstring(L, "space");
-		lua_pushnumber(L, pick_u32(reqpos, reqend) );
-		lua_settable(L, -3);
-
-		lua_pushstring(L, "index");
-		lua_pushnumber(L, pick_u32(reqpos, reqend) );
-		lua_settable(L, -3);
-
-		lua_pushstring(L, "offset");
-		lua_pushnumber(L, pick_u32(reqpos, reqend) );
-		lua_settable(L, -3);
-
-		lua_pushstring(L, "limit");
-		lua_pushnumber(L, pick_u32(reqpos, reqend) );
-		lua_settable(L, -3);
-
-		lua_pushstring(L, "keys");
-		lua_newtable(L);
-		count = pick_u32(reqpos, reqend);
-		for (i = 0; i < count; i++) {
-			lua_pushnumber(L, i + 1);
-			lua_newtable(L);
-			fcount = pick_u32(reqpos, reqend);
-			for (j = 0; j < fcount; j++) {
-				s = pick_field_str(reqpos, reqend, &l);
-				lua_pushnumber(L, j + 1);
-				lua_pushlstring(L, s, l);
-				lua_settable(L, -3);
-			}
-			lua_settable(L, -3);
+	} else if (strcmp(key, "space") == 0) {
+		switch(request->type) {
+			case REPLACE:
+			case DELETE:
+			case DELETE_1_3:
+			case SELECT:
+			case UPDATE:
+				lua_pushvalue(L, 2);
+				lua_pushnumber(L, pick_u32(reqpos, reqend) );
+				lua_rawset(L, 1);
+				break;
+			default:
+				luaL_error(L,
+					"there is no 'space' in reqtype=%d",
+					request->type);
 		}
-		lua_settable(L, -3);
-		say_info("select was parsed %d\n", request->len);
-		break;
-
-	case CALL:
-		lua_pushstring(L, "type");
-		lua_pushstring(L, "call");
-		lua_settable(L, -3);
-		pick_u32(reqpos, reqend); // flags
-
-		s = pick_field_str(reqpos, reqend, &l);
-
-		/* proc name */
-		lua_pushstring(L, "proc");
-		lua_pushlstring(L, s, l);
-		lua_settable(L, -3);
-
-		/* lua arguments */
-		fcount = pick_u32(reqpos, reqend);
-
-		lua_pushstring(L, "args");
-		lua_newtable(L);
-
-		for (i = 0; i < fcount; i++) {
-			s = pick_field_str(reqpos, reqend, &l);
-			lua_pushnumber(L, i + 1);
-			lua_pushlstring(L, s, l);
-			lua_settable(L, -3);
-		}
-		lua_settable(L, -3);
-		break;
-
-
-	case UPDATE:
-		lua_pushstring(L, "type");
-		lua_pushstring(L, "update");
-		lua_settable(L, -3);
-
-		/* space */
-		lua_pushstring(L, "space");
-		lua_pushnumber(L, pick_u32(reqpos, reqend) );
-		lua_settable(L, -3);
-
-		pick_u32(reqpos, reqend); // flags
-
-		/* key */
-		fcount = pick_u32(reqpos, reqend);
-
-		lua_pushstring(L, "key");
-		lua_newtable(L);
-
-		for (i = 0; i < fcount; i++) {
-			s = pick_field_str(reqpos, reqend, &l);
-			lua_pushnumber(L, i + 1);
-			lua_pushlstring(L, s, l);
-			lua_settable(L, -3);
-		}
-		lua_settable(L, -3);
-
-
-
-		lua_pushstring(L, "op");
-
-		lua_newtable(L);
-		/* operations */
-		count = pick_u32(reqpos, reqend);
-
-		ops = alloca(2 * count + 1);
-		ops[2 * count] = 0;
-		for (j = i = 0; i < count; i++) {
-			u32 fno = pick_u32(reqpos, reqend);
-			u32 op = pick_u32(reqpos, reqend);
-
-			s = pick_field_str(reqpos, reqend, &l);
-
-			lua_pushnumber(L, ++j);
-			lua_pushnumber(L, fno);
-			lua_settable(L, -3);
-
-			switch(op) {
-			case 0:	/* set */
-				ops[i * 2] = '=';
-				ops[1 + i * 2] = 'p';
-				lua_pushnumber(L, ++j);
-				lua_pushlstring(L, s, l);
-				lua_settable(L, -3);
+	} else if (strcmp(key, "flags") == 0) {
+		switch(request->type) {
+			case REPLACE:
+			case DELETE:
+			case UPDATE:
+				pick_u32(reqpos, reqend);	/* spaceno */
+			case CALL:
+				lua_pushvalue(L, 2);
+				lua_pushnumber(L, pick_u32(reqpos, reqend));
+				lua_rawset(L, 1);
 				break;
-			case 1: /* add */
-				ops[i * 2] = '+';
-				ops[1 + i * 2] = 'p';
-				lua_pushnumber(L, ++j);
-				lua_pushlstring(L, s, l);
-				lua_settable(L, -3);
-				break;
-			case 2: /* and */
-				ops[i * 2] = '&';
-				ops[1 + i * 2] = 'p';
-				lua_pushnumber(L, ++j);
-				lua_pushlstring(L, s, l);
-				lua_settable(L, -3);
-				break;
-			case 3: /* xor */
-				ops[i * 2] = '^';
-				ops[1 + i * 2] = 'p';
-				lua_pushnumber(L, ++j);
-				lua_pushlstring(L, s, l);
-				lua_settable(L, -3);
-				break;
-			case 4: /* or */
-				ops[i * 2] = '|';
-				ops[1 + i * 2] = 'p';
-				lua_pushnumber(L, ++j);
-				lua_pushlstring(L, s, l);
-				lua_settable(L, -3);
-				break;
-			case 6: /* delete */
-				ops[i * 2] = '#';
-				ops[1 + i * 2] = 'p';
-				lua_pushnumber(L, ++j);
-				lua_pushstring(L, "");
-				lua_settable(L, -3);
-				break;
-			case 7: /* insert_before */
-				ops[i * 2] = '!';
-				ops[1 + i * 2] = 'p';
-				lua_pushnumber(L, ++j);
-				lua_pushlstring(L, s, l);
-				lua_settable(L, -3);
-				break;
-
-			case 5: /* splice */
-				ops[i * 2] = ':';
-				ops[1 + i * 2] = 'p';
-
-				data = s;
-				reqpos = &data;
-				reqend = data + l;
-
-				/* offset */
-				s = pick_field_str(reqpos,
-					reqend, &l);
-				if (l != 4)
-					luaL_error(L, "Wrong offset");
-				lua_pushnumber(L, ++j);
-				lua_pushnumber(L,
-					*(uint32_t *)s);
-				lua_settable(L, -3);
-
-				/* length */
-				s = pick_field_str(reqpos,
-					reqend, &l);
-				if (l != 4)
-					luaL_error(L, "Wrong length");
-				lua_pushnumber(L, ++j);
-				lua_pushnumber(L,
-					*(uint32_t *)s);
-				lua_settable(L, -3);
-
-				/* offset */
-				s = pick_field_str(reqpos,
-					reqend, &l);
-				lua_pushnumber(L, ++j);
-				lua_pushlstring(L, s, l);
-				lua_settable(L, -3);
-				break;
-
 
 			default:
-				luaL_error(L, "unknown opcode: %d", op );
-			}
+				break;
 		}
-		lua_settable(L, -3);
+	} else if (strcmp(key, "proc") == 0) {
+		if (request->type == CALL) {
+			pick_u32(reqpos, reqend);	/* flags */
 
-		lua_pushstring(L, "ops");
-		lua_pushstring(L, ops);
-		lua_settable(L, -3);
-		break;
+			s = pick_field_str(reqpos, reqend, &l);
 
-	default:
-		luaL_error(L, "not implemented yet");
-		break;
+			/* proc name */
+			lua_pushvalue(L, 2);
+			lua_pushlstring(L, s, l);
+			lua_rawset(L, 1);
+		}
+	} else if (strcmp(key, "key") == 0) {
+		switch(request->type) {
+			case REPLACE:
+			case DELETE:
+			case UPDATE:
+			case DELETE_1_3:
+				pick_u32(reqpos, reqend);	  /* space */
+				if (request->type != DELETE_1_3)
+					pick_u32(reqpos, reqend); /* flags */
+
+				fcount = pick_u32(reqpos, reqend);
+
+				lua_pushvalue(L, 2);
+				lua_newtable(L);
+
+				for (i = 0; i < fcount; i++) {
+					s = pick_field_str(reqpos, reqend, &l);
+					lua_pushnumber(L, i + 1);
+					lua_pushlstring(L, s, l);
+					lua_settable(L, -3);
+				}
+				(void)i;
+				(void)fcount;
+
+
+				lua_rawset(L, 1);
+				break;
+
+			default:
+				break;
+		}
+	} else if (strcmp(key, "keys") == 0) {
+		if (request->type == SELECT) {
+			pick_u32(reqpos, reqend);	/* space */
+			pick_u32(reqpos, reqend);	/* index */
+			pick_u32(reqpos, reqend);	/* offset */
+			pick_u32(reqpos, reqend);	/* limit */
+
+			lua_pushvalue(L, 2);
+			lua_newtable(L);
+			count = pick_u32(reqpos, reqend);
+			for (i = 0; i < count; i++) {
+				lua_pushnumber(L, i + 1);
+				lua_newtable(L);
+				fcount = pick_u32(reqpos, reqend);
+				for (j = 0; j < fcount; j++) {
+					s = pick_field_str(reqpos, reqend, &l);
+					lua_pushnumber(L, j + 1);
+					lua_pushlstring(L, s, l);
+					lua_settable(L, -3);
+				}
+				lua_settable(L, -3);
+			}
+			lua_rawset(L, 1);
+		}
+	} else if (strcmp(key, "index") == 0) {
+		if (request->type == SELECT) {
+			pick_u32(reqpos, reqend);       /* space */
+			lua_pushvalue(L, 2);
+			lua_pushnumber(L, pick_u32(reqpos, reqend));
+			lua_rawset(L, 1);
+		}
+	} else if (strcmp(key, "offset") == 0) {
+		if (request->type == SELECT) {
+			pick_u32(reqpos, reqend);       /* space */
+			pick_u32(reqpos, reqend);       /* index */
+			lua_pushvalue(L, 2);
+			lua_pushnumber(L, pick_u32(reqpos, reqend));
+			lua_rawset(L, 1);
+		}
+	} else if (strcmp(key, "limit") == 0) {
+		if (request->type == SELECT) {
+			pick_u32(reqpos, reqend);       /* space */
+			pick_u32(reqpos, reqend);       /* index */
+			pick_u32(reqpos, reqend);       /* offset */
+			lua_pushvalue(L, 2);
+			lua_pushnumber(L, pick_u32(reqpos, reqend));
+			lua_rawset(L, 1);
+		}
+	} else if (strcmp(key, "format") == 0 || strcmp(key, "opargs") == 0) {
+		if (request->type == UPDATE) {
+			pick_u32(reqpos, reqend);       /* space */
+			pick_u32(reqpos, reqend);	/* flags */
+
+			/* key */
+			fcount = pick_u32(reqpos, reqend);
+			for (i = 0; i < fcount; i++)
+				pick_field_str(reqpos, reqend, &l);
+
+
+			lua_pushstring(L, "opargs");
+			lua_newtable(L);
+
+			/* operations */
+			count = pick_u32(reqpos, reqend);
+
+			char *format = alloca(2 * count + 1);
+			format[2 * count] = 0;
+			for (j = i = 0; i < count; i++) {
+				u32 fno = pick_u32(reqpos, reqend);
+				u8 op = pick_u8(reqpos, reqend);
+
+				lua_pushnumber(L, ++j);
+				lua_pushnumber(L, fno);
+				lua_settable(L, -3);
+
+				if (op == 5) {
+					/* splice */
+					format[i * 2] = ':';
+					format[1 + i * 2] = 'p';
+
+					s = *reqpos;
+					l = pick_varint32(reqpos, reqend);
+					*reqpos += l;
+					lua_pushnumber(L, ++j);
+					lua_pushlstring(L, s,
+						((const char *)*reqpos) - s);
+					lua_settable(L, -3);
+					continue;
+				}
+
+				s = pick_field_str(reqpos, reqend, &l);
+
+
+				switch(op) {
+				case 0:	/* set */
+					format[i * 2] = '=';
+					format[1 + i * 2] = 'p';
+					lua_pushnumber(L, ++j);
+					lua_pushlstring(L, s, l);
+					lua_settable(L, -3);
+					break;
+				case 1: /* add */
+					format[i * 2] = '+';
+					format[1 + i * 2] = 'p';
+					lua_pushnumber(L, ++j);
+					lua_pushlstring(L, s, l);
+					lua_settable(L, -3);
+					break;
+				case 2: /* and */
+					format[i * 2] = '&';
+					format[1 + i * 2] = 'p';
+					lua_pushnumber(L, ++j);
+					lua_pushlstring(L, s, l);
+					lua_settable(L, -3);
+					break;
+				case 3: /* xor */
+					format[i * 2] = '^';
+					format[1 + i * 2] = 'p';
+					lua_pushnumber(L, ++j);
+					lua_pushlstring(L, s, l);
+					lua_settable(L, -3);
+					break;
+				case 4: /* or */
+					format[i * 2] = '|';
+					format[1 + i * 2] = 'p';
+					lua_pushnumber(L, ++j);
+					lua_pushlstring(L, s, l);
+					lua_settable(L, -3);
+					break;
+				case 6: /* delete */
+					format[i * 2] = '#';
+					format[1 + i * 2] = 'p';
+					lua_pushnumber(L, ++j);
+					lua_pushstring(L, "");
+					lua_settable(L, -3);
+					break;
+				case 7: /* insert_before */
+					format[i * 2] = '!';
+					format[1 + i * 2] = 'p';
+					lua_pushnumber(L, ++j);
+					lua_pushlstring(L, s, l);
+					lua_settable(L, -3);
+					break;
+
+
+				default:
+					luaL_error(L, "unknown opcode: %d", op);
+				}
+			}
+
+			lua_rawset(L, 1);
+
+			lua_pushstring(L, "format");
+			lua_pushstring(L, format);
+			lua_rawset(L, 1);
+		}
 	}
 
-	lua_pushstring(L, "rawdata");
-	lua_pushlstring(L, request->data, request->len);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "ctype");
-	lua_pushnumber(L, request->type);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "flags");
-	lua_pushnumber(L, request->flags);
-	lua_settable(L, -3);
+	lua_pushvalue(L, 2);
+	lua_rawget(L, 1);
+	return 1;
 }
+
+static int
+lbox_push_request(struct lua_State *L, struct request *request)
+{
+	lua_newtable(L);
+	lua_pushstring(L, "raw");
+	lua_pushlightuserdata(L, request);
+	lua_settable(L, -3);
+
+	lua_newtable(L);
+	lua_pushstring(L, "__index");
+	lua_pushcclosure(L, lbox_request_index, 0);
+	lua_settable(L, -3);
+	lua_setmetatable(L, -2);
+	return 1;
+}
+
 
 static int
 lbox_on_request_trigger(struct request *request,
@@ -2054,7 +2076,7 @@ lbox_on_request_trigger(struct request *request,
 
 		if (skip) {
 			lua_settop(L, 0);
-			return 0;
+			return 1;
 		} else {
 			port_add_lua_multret(port, L);
 			return 0;
