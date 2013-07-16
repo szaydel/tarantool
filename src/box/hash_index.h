@@ -31,14 +31,35 @@
 
 #include "index.h"
 
-@class Index;
+struct mh_index_t;
 
-@interface HashIndex: Index
+class HashIndex: public Index {
+public:
+	HashIndex(struct key_def *key_def, struct space *space);
+	~HashIndex();
 
-+ (struct index_traits *) traits;
-+ (HashIndex *) alloc: (struct key_def *) key_def :(struct space *) space;
+	virtual void beginBuild();
+	virtual void buildNext(struct tuple *tuple);
+	virtual void endBuild();
+	virtual void build(Index *pk);
+	virtual size_t size() const;
+	virtual struct tuple *min() const;
+	virtual struct tuple *max() const;
+	virtual struct tuple *random(uint32_t rnd) const;
+	virtual struct tuple *findByKey(const char *key, uint32_t part_count) const;
+	virtual struct tuple *replace(struct tuple *old_tuple,
+				      struct tuple *new_tuple,
+				      enum dup_replace_mode mode);
 
-- (void) reserve: (u32) n_tuples;
-@end
+	virtual struct iterator *allocIterator() const;
+	virtual void initIterator(struct iterator *iterator,
+				  enum iterator_type type,
+				  const char *key, uint32_t part_count) const;
+
+	virtual void reserve(uint32_t n_tuples);
+
+protected:
+	struct mh_index_t *hash;
+};
 
 #endif /* TARANTOOL_BOX_HASH_INDEX_H_INCLUDED */

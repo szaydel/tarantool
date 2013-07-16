@@ -41,15 +41,20 @@
 #include "lua/init.h"
 #include <recovery.h>
 #include <tbuf.h>
-#include <util.h>
+#include "tarantool/util.h"
 #include <errinj.h>
 #include "coio_buf.h"
 
-#include "lua.h"
-#include "lauxlib.h"
-#include "lualib.h"
+extern "C" {
+#include <lua.h>
+#include <lauxlib.h>
+#include <lualib.h>
+}
+
 #include "box/box.h"
+#include "lua/init.h"
 #include "session.h"
+#include "scoped_guard.h"
 
 static const char *help =
 	"available commands:" CRLF
@@ -61,6 +66,7 @@ static const char *help =
 	" - show slab" CRLF
 	" - show palloc" CRLF
 	" - show stat" CRLF
+	" - show plugins" CRLF
 	" - save coredump" CRLF
 	" - save snapshot" CRLF
 	" - lua command" CRLF
@@ -76,14 +82,14 @@ static const char *unknown_command = "unknown command. try typing help." CRLF;
 }%%
 
 struct salloc_stat_admin_cb_ctx {
-	i64 total_used;
+	int64_t total_used;
 	struct tbuf *out;
 };
 
 static int
 salloc_stat_admin_cb(const struct slab_cache_stats *cstat, void *cb_ctx)
 {
-	struct salloc_stat_admin_cb_ctx *ctx = cb_ctx;
+	struct salloc_stat_admin_cb_ctx *ctx = (struct salloc_stat_admin_cb_ctx *) cb_ctx;
 
 	tbuf_printf(ctx->out,
 		    "     - { item_size: %- 5i, slabs: %- 3i, items: %- 11" PRIi64
@@ -117,7 +123,6 @@ show_slab(struct tbuf *out)
 	tbuf_printf(out, "  arena_used: %.2f%%" CRLF,
 		(double)astat.used / astat.size * 100);
 }
-
 
 static void
 end(struct tbuf *out)
@@ -159,7 +164,7 @@ tarantool_info(struct tbuf *out)
 	tbuf_printf(out, "  lsn: %" PRIi64 CRLF,
 		    recovery_state->confirmed_lsn);
 	tbuf_printf(out, "  recovery_lag: %.3f" CRLF,
-		    recovery_state->remote ? 
+		    recovery_state->remote ?
 		    recovery_state->remote->recovery_lag : 0);
 	tbuf_printf(out, "  recovery_last_update: %.3f" CRLF,
 		    recovery_state->remote ?
@@ -172,9 +177,9 @@ tarantool_info(struct tbuf *out)
 }
 
 static int
-show_stat_item(const char *name, int rps, i64 total, void *ctx)
+show_stat_item(const char *name, int rps, int64_t total, void *ctx)
 {
-	struct tbuf *buf = ctx;
+	struct tbuf *buf = (struct tbuf *) ctx;
 	int name_len = strlen(name);
 	tbuf_printf(buf,
 		    "  %s:%*s{ rps: %- 6i, total: %- 12" PRIi64 " }" CRLF,
@@ -200,7 +205,7 @@ admin_dispatch(struct ev_io *coio, struct iobuf *iobuf, lua_State *L)
 	char *strstart, *strend;
 	bool state;
 
-	while ((pe = memchr(in->pos, '\n', in->end - in->pos)) == NULL) {
+	while ((pe = (char *) memchr(in->pos, '\n', in->end - in->pos)) == NULL) {
 		if (coio_bread(coio, in, 1) <= 0)
 			return -1;
 	}
@@ -209,6 +214,12 @@ admin_dispatch(struct ev_io *coio, struct iobuf *iobuf, lua_State *L)
 	p = in->pos;
 
 	%%{
+	        action show_plugins {
+		    start(out);
+                    show_plugins_stat(out);
+		    end(out);
+                }
+
 		action show_configuration {
 			start(out);
 			show_cfg(out);
@@ -274,6 +285,7 @@ admin_dispatch(struct ev_io *coio, struct iobuf *iobuf, lua_State *L)
 		mod = "mo"("d")?;
 		palloc = "pa"("l"("l"("o"("c")?)?)?)?;
 		stat = "st"("a"("t")?)?;
+		plugins = "plugins";
 
 		help = "h"("e"("l"("p")?)?)?;
 		exit = "e"("x"("i"("t")?)?)? | "q"("u"("i"("t")?)?)?;
@@ -303,13 +315,14 @@ admin_dispatch(struct ev_io *coio, struct iobuf *iobuf, lua_State *L)
 			    show " "+ palloc		%{start(out); palloc_stat(out); end(out);}	|
 			    show " "+ stat		%{start(out); show_stat(out);end(out);}		|
 			    show " "+ injections	%show_injections                                |
+			    show " "+ plugins           %show_plugins                                   |
 			    set " "+ injection " "+ name " "+ state	%set_injection                  |
 			    save " "+ coredump		%{coredump(60); ok(out);}			|
 			    save " "+ snapshot		%save_snapshot					|
 			    check " "+ slab		%{slab_validate(); ok(out);}			|
 			    reload " "+ configuration	%reload_configuration);
 
-	        main := commands eol;
+		main := commands eol;
 		write init;
 		write exec;
 	}%%
@@ -333,25 +346,26 @@ admin_handler(va_list ap)
 	struct iobuf *iobuf = va_arg(ap, struct iobuf *);
 	lua_State *L = lua_newthread(tarantool_L);
 	int coro_ref = luaL_ref(tarantool_L, LUA_REGISTRYINDEX);
-	@try {
-		/*
-		 * Admin and iproto connections must have a
-		 * session object, representing the state of
-		 * a remote client: it's used in Lua
-		 * stored procedures.
-		 */
-		session_create(coio.fd);
-		for (;;) {
-			if (admin_dispatch(&coio, iobuf, L) < 0)
-				return;
-			iobuf_gc(iobuf);
-			fiber_gc();
-		}
-	} @finally {
+
+	auto scoped_guard = make_scoped_guard([&] {
 		luaL_unref(tarantool_L, LUA_REGISTRYINDEX, coro_ref);
 		evio_close(&coio);
 		iobuf_delete(iobuf);
 		session_destroy(fiber->sid);
+	});
+
+	/*
+	 * Admin and iproto connections must have a
+	 * session object, representing the state of
+	 * a remote client: it's used in Lua
+	 * stored procedures.
+	 */
+	session_create(coio.fd);
+	for (;;) {
+		if (admin_dispatch(&coio, iobuf, L) < 0)
+			return;
+		iobuf_gc(iobuf);
+		fiber_gc();
 	}
 }
 

@@ -31,9 +31,13 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+#if defined(__cplusplus)
+extern "C" {
+#endif /* defined(__cplusplus) */
+
 typedef unsigned int rsize_t;
 typedef int rssize_t;
-typedef void *(*rope_split_func)(void *, size_t, size_t);
+typedef void *(*rope_split_func)(void *, void *, size_t, size_t);
 typedef void *(*rope_alloc_func)(void *, size_t);
 typedef void (*rope_free_func)(void *, void *);
 
@@ -45,9 +49,9 @@ struct rope_node {
 	int height;
 	/** Subtree size. */
 	rsize_t tree_size;
-        /* Substring size. */
+	/* Substring size. */
 	rsize_t leaf_size;
-        /* Substring. */
+	/* Substring. */
 	void *data;
 	/* Left (0) and right (1) links */
 	struct rope_node *link[2];
@@ -59,7 +63,9 @@ struct rope {
 	/** Memory management context. */
 	void *alloc_ctx;
 	/** Get a sequence tail, given offset. */
-	void *(*split)(void *, size_t, size_t);
+	rope_split_func split;
+	/** Split function context. */
+	void *split_ctx;
 	/** Allocate memory (context, size). */
 	void *(*alloc)(void *, size_t);
 	/** Free memory (context, pointer) */
@@ -101,12 +107,13 @@ rope_size(struct rope *rope)
 
 /** Initialize an empty rope. */
 static inline void
-rope_create(struct rope *rope, rope_split_func split_func,
+rope_create(struct rope *rope, rope_split_func split_func, void *split_ctx,
 	    rope_alloc_func alloc_func, rope_free_func free_func,
 	    void *alloc_ctx)
 {
 	rope->root = NULL;
 	rope->split = split_func;
+	rope->split_ctx = split_ctx;
 	rope->alloc = alloc_func;
 	rope->free = free_func;
 	rope->alloc_ctx = alloc_ctx;
@@ -126,14 +133,14 @@ rope_create(struct rope *rope, rope_split_func split_func,
  *          to allocate memory
  */
 static inline struct rope *
-rope_new(rope_split_func split_func, rope_alloc_func alloc_func,
-	 rope_free_func free_func, void *alloc_ctx)
+rope_new(rope_split_func split_func, void *split_ctx,
+	 rope_alloc_func alloc_func, rope_free_func free_func, void *alloc_ctx)
 {
 	struct rope *rope= (struct rope *) alloc_func(alloc_ctx,
 						      sizeof(struct rope));
 	if (rope == NULL)
 		return NULL;
-	rope_create(rope, split_func, alloc_func, free_func, alloc_ctx);
+	rope_create(rope, split_func, split_ctx, alloc_func, free_func, alloc_ctx);
 	return rope;
 }
 
@@ -210,8 +217,8 @@ rope_iter_create(struct rope_iter *it, struct rope *rope)
 static inline struct rope_iter *
 rope_iter_new(struct rope *rope)
 {
-	struct rope_iter *it = rope->alloc(rope->alloc_ctx,
-					     sizeof(struct rope_iter));
+	struct rope_iter *it = (struct rope_iter *)
+			rope->alloc(rope->alloc_ctx, sizeof(struct rope_iter));
 
 	if (it == NULL)
 		return NULL;
@@ -254,5 +261,9 @@ rope_check(struct rope *rope);
 /** Pretty print a rope. */
 void
 rope_pretty_print(struct rope *rope, void (*print_leaf)(void *, size_t));
+
+#if defined(__cplusplus)
+}
+#endif /* defined(__cplusplus) */
 
 #endif /* INCLUDES_TARANTOOL_ROPE_H */

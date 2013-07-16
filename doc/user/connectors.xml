@@ -8,36 +8,42 @@
 
 <title>Connectors</title>
 <blockquote><para>
-  This chapter documents APIs for various programming languages --
-  C, Perl, Ruby, PHP and Python.
+  This chapter documents APIs for various programming languages.
 </para></blockquote>
 
 <para>Apart from the native Tarantool client driver, you can always use a <emphasis role="strong">Memcached</emphasis> driver of your choice, after enabling Memcached protocol in the configuration file.</para>
 
-  <section>
+  <section xml:id="connector-c">
     <title>C</title>
     <para>
        Please see <link
-       xlink:href="https://github.com/mailru/tarantool/blob/master/connector/c/include/tp.h"><filename>connector/c</filename></link> in the source tree.
+       xlink:href="https://github.com/tarantool/tarantool/blob/master/connector/c/include/tp.h"><filename>connector/c</filename></link> in the source tree.
     </para>
   </section>
 
-  <section>
+  <section xml:id="connector-node.js">
+    <title>node.js</title>
+    <para>
+       <link xlink:href="https://github.com/devgru/node-tarantool"><filename>http://github.com/devgru/node-tarantool</filename></link>.
+    </para>
+  </section>
+
+  <section xml:id="connector-perl">
     <title>Perl</title>
     <para>
-       Please refer to CPAN module <link xlink:href='http://search.cpan.org/~unera/DR-Tarantool/'>DR::Tarantool::Box</link>.
+       Please refer to CPAN module <link xlink:href='http://search.cpan.org/~unera/DR-Tarantool/'>DR::Tarantool</link>.
     </para>
   </section>
 
-  <section>
+  <section xml:id="connector-php">
     <title>PHP</title>
     <para>
        Please see <link
-       xlink:href="https://github.com/mailru/tarantool-php/"><filename>tarantool-php</filename></link> project at GitHub.
+       xlink:href="https://github.com/tarantool/tarantool-php/"><filename>tarantool-php</filename></link> project at GitHub.
     </para>
   </section>
 
-  <section>
+  <section xml:id="connector-python">
     <title>Python</title>
     <para>
        Please see <link
@@ -45,7 +51,7 @@
     </para>
   </section>
 
-  <section>
+  <section xml:id="connector-ruby">
     <title>Ruby</title>
     <para>
        You need <emphasis role="strong">Ruby 1.9</emphasis> or later

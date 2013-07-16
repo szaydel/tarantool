@@ -28,17 +28,19 @@
  * THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "config.h"
+#include "tarantool/config.h"
 
 #include <stdbool.h>
 #include <stdint.h>
 #include <unistd.h>
 #include <tarantool_ev.h>
 #include <coro.h>
-#include <util.h>
+#include <tarantool/util.h>
 #include "third_party/queue.h"
 
+#if defined(__cplusplus)
 #include "exception.h"
+#endif /* defined(__cplusplus) */
 #include "palloc.h"
 #include <rlist.h>
 
@@ -58,8 +60,19 @@
  * cancelled.
  */
 
-@interface FiberCancelException: tnt_Exception
-@end
+#if defined(__cplusplus)
+class FiberCancelException: public Exception {
+public:
+	FiberCancelException(const char *file, unsigned line)
+		: Exception(file, line) {
+		/* Nothing */
+	}
+
+	virtual void log() const {
+		say_debug("FiberCancelException");
+	}
+};
+#endif /* defined(__cplusplus) */
 
 struct fiber {
 #ifdef ENABLE_BACKTRACE
@@ -85,9 +98,13 @@ struct fiber {
 	struct rlist link;
 	struct rlist state;
 
+	/* This struct is considered as non-POD when compiling by g++.
+	 * You can safetly ignore all offset_of-related warnings.
+	 * See http://gcc.gnu.org/bugzilla/show_bug.cgi?id=31488
+	 */
 	void (*f) (va_list);
 	va_list f_data;
-	u32 flags;
+	uint32_t flags;
 	struct fiber *waiter;
 };
 
@@ -106,6 +123,9 @@ fiber_name(struct fiber *f)
 	return palloc_name(f->gc_pool);
 }
 
+void
+fiber_checkstack();
+
 void fiber_yield(void);
 void fiber_yield_to(struct fiber *f);
 
@@ -121,7 +141,7 @@ void fiber_destroy_all();
 void fiber_gc(void);
 void fiber_call(struct fiber *callee, ...);
 void fiber_wakeup(struct fiber *f);
-struct fiber *fiber_find(int fid);
+struct fiber *fiber_find(uint32_t fid);
 /** Cancel a fiber. A cancelled fiber will have
  * tnt_FiberCancelException raised in it.
  *

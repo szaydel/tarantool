@@ -1,17 +1,17 @@
-lua dofile('index_random_test.lua')
+dofile('index_random_test.lua')
 ---
 ...
 insert into t1 values ('brave', 'new', 'world')
 Insert OK, 1 row affected
-lua box.space[1].index[1]:min()
+box.space[1].index[1]:min()
 ---
  - 'brave': {'new', 'world'}
 ...
-lua box.space[1].index[1]:max()
+box.space[1].index[1]:max()
 ---
  - 'brave': {'new', 'world'}
 ...
-call box.select(1, 1, 'new', 'world')
+call box.select('1', '1', 'new', 'world')
 Found 1 tuple:
 ['brave', 'new', 'world']
 #
@@ -19,9 +19,9 @@ Found 1 tuple:
 # "assert failed, when key cardinality is greater than index cardinality"
 # https://bugs.launchpad.net/tarantool/+bug/904208
 #
-call box.select(1, 1, 'new', 'world', 'order')
-An error occurred: ER_KEY_PART_COUNT, 'Key part count 3 is greater than index part count 2'
-call box.delete(1, 'brave')
+call box.select('1', '1', 'new', 'world', 'order')
+An error occurred: ER_KEY_PART_COUNT, 'Invalid key part count (expected [0..2], got 3)'
+call box.delete('1', 'brave')
 Found 1 tuple:
 ['brave', 'new', 'world']
 #
@@ -31,36 +31,40 @@ Found 1 tuple:
 #
 insert into t1 values ('item 1', 'alabama', 'song')
 Insert OK, 1 row affected
+box.select(1, 1, 'alabama')
+---
+ - 'item 1': {'alabama', 1735290739}
+...
 insert into t1 values ('item 2', 'california', 'dreaming ')
 Insert OK, 1 row affected
 insert into t1 values ('item 3', 'california', 'uber alles')
 Insert OK, 1 row affected
 insert into t1 values ('item 4', 'georgia', 'on my mind')
 Insert OK, 1 row affected
-lua iter, tuple = box.space[1].index[1]:next('california')
+iter, tuple = box.space[1].index[1]:next('california')
 ---
 ...
-lua tuple
+tuple
 ---
  - 'item 2': {'california', 'dreaming '}
 ...
-lua iter, tuple = box.space[1].index[1]:next(iter)
+iter, tuple = box.space[1].index[1]:next(iter)
 ---
 ...
-lua tuple
+tuple
 ---
  - 'item 3': {'california', 'uber alles'}
 ...
-call box.delete(1, 'item 1')
+call box.delete('1', 'item 1')
 Found 1 tuple:
 ['item 1', 'alabama', 1735290739]
-call box.delete(1, 'item 2')
+call box.delete('1', 'item 2')
 Found 1 tuple:
 ['item 2', 'california', 'dreaming ']
-call box.delete(1, 'item 3')
+call box.delete('1', 'item 3')
 Found 1 tuple:
 ['item 3', 'california', 'uber alles']
-call box.delete(1, 'item 4')
+call box.delete('1', 'item 4')
 Found 1 tuple:
 ['item 4', 'georgia', 'on my mind']
 insert into t5 values ('01234567', 'new', 'world')
@@ -77,82 +81,126 @@ call box.select_reverse_range(5, 1, 2, 'of')
 Found 2 tuples:
 ['00000000', 'of', 'puppets']
 ['00000001', 'of', 'might', 'and', 'magic']
-lua box.space[5]:truncate()
+box.space[5]:truncate()
 ---
 ...
-lua box.insert('8', tonumber64('18446744073709551615'), 'magic')
+box.insert('8', tonumber64('18446744073709551615'), 'magic')
 ---
  - 18446744073709551615: {'magic'}
 ...
-lua tu = box.select('8', '0', tonumber64('18446744073709551615'))
+tu = box.select('8', '0', tonumber64('18446744073709551615'))
 ---
 ...
-lua num = box.unpack('l', tu[0])
+num = box.unpack('l', tu[0])
 ---
 ...
-lua print(num)
+print(num)
 ---
 18446744073709551615
 ...
-lua type(num) == 'cdata'
+type(num) == 'cdata'
 ---
  - true
 ...
-lua num == tonumber64('18446744073709551615')
+num == tonumber64('18446744073709551615')
 ---
  - true
 ...
-lua num = box.unpack('l', tu[0])
+num = box.unpack('l', tu[0])
 ---
 ...
-lua num == tonumber64('18446744073709551615')
+num == tonumber64('18446744073709551615')
 ---
  - true
 ...
-lua box.space[8]:truncate()
+box.delete(8, 18446744073709551615ULL)
+---
+ - 18446744073709551615: {'magic'}
+...
+box.insert('8', 125ULL, 'magic')
+---
+ - 125: {'magic'}
+...
+tu = box.select('8', '0', 125)
 ---
 ...
-lua box.insert(14, 0, 0)
+tu2 = box.select('8', '0', 125LL)
+---
+...
+num = box.unpack('l', tu[0])
+---
+...
+num2 = box.unpack('l', tu2[0])
+---
+...
+print(num)
+---
+125
+...
+print(num2)
+---
+125
+...
+type(num) == 'cdata'
+---
+ - true
+...
+type(num2) == 'cdata'
+---
+ - true
+...
+num == tonumber64('125')
+---
+ - true
+...
+num2 == tonumber64('125')
+---
+ - true
+...
+box.space[8]:truncate()
+---
+...
+box.insert(14, 0, 0)
 ---
  - 0: {0}
 ...
-lua box.insert(14, 1, 0)
+box.insert(14, 1, 0)
 ---
  - 1: {0}
 ...
-lua box.insert(14, 2, 0)
+box.insert(14, 2, 0)
 ---
  - 2: {0}
 ...
-lua box.insert(14, 3, 0)
+box.insert(14, 3, 0)
 ---
  - 3: {0}
 ...
-lua box.insert(14, 4, 0)
+box.insert(14, 4, 0)
 ---
  - 4: {0}
 ...
-lua box.insert(14, 5, 0)
+box.insert(14, 5, 0)
 ---
  - 5: {0}
 ...
-lua box.insert(14, 6, 0)
+box.insert(14, 6, 0)
 ---
  - 6: {0}
 ...
-lua box.insert(14, 7, 0)
+box.insert(14, 7, 0)
 ---
  - 7: {0}
 ...
-lua box.insert(14, 8, 0)
+box.insert(14, 8, 0)
 ---
  - 8: {0}
 ...
-lua box.insert(14, 9, 0)
+box.insert(14, 9, 0)
 ---
  - 9: {0}
 ...
-lua box.select_range(14, 1, 10)
+box.select_range(14, 1, 10)
 ---
  - 0: {0}
  - 1: {0}
@@ -165,7 +213,7 @@ lua box.select_range(14, 1, 10)
  - 8: {0}
  - 9: {0}
 ...
-lua box.select_reverse_range(14, 1, 10)
+box.select_reverse_range(14, 1, 10)
 ---
  - 9: {0}
  - 8: {0}
@@ -178,14 +226,14 @@ lua box.select_reverse_range(14, 1, 10)
  - 1: {0}
  - 0: {0}
 ...
-lua box.select_reverse_range(14, 1, 4)
+box.select_reverse_range(14, 1, 4)
 ---
  - 9: {0}
  - 8: {0}
  - 7: {0}
  - 6: {0}
 ...
-lua box.space[14]:truncate()
+box.space[14]:truncate()
 ---
 ...
 
@@ -193,31 +241,31 @@ lua box.space[14]:truncate()
 # Tests for box.index iterators
 #
 
-lua box.insert(16, 'pid_1', 'sid_1', 'tid_999')
+box.insert(16, 'pid_1', 'sid_1', 'tid_999')
 ---
  - 'pid_1': {'sid_1', 'tid_999'}
 ...
-lua box.insert(16, 'pid_2', 'sid_1', 'tid_998')
+box.insert(16, 'pid_2', 'sid_1', 'tid_998')
 ---
  - 'pid_2': {'sid_1', 'tid_998'}
 ...
-lua box.insert(16, 'pid_3', 'sid_1', 'tid_997')
+box.insert(16, 'pid_3', 'sid_1', 'tid_997')
 ---
  - 'pid_3': {'sid_1', 'tid_997'}
 ...
-lua box.insert(16, 'pid_4', 'sid_2', 'tid_996')
+box.insert(16, 'pid_4', 'sid_2', 'tid_996')
 ---
  - 'pid_4': {'sid_2', 'tid_996'}
 ...
-lua box.insert(16, 'pid_5', 'sid_2', 'tid_995')
+box.insert(16, 'pid_5', 'sid_2', 'tid_995')
 ---
  - 'pid_5': {'sid_2', 'tid_995'}
 ...
-lua box.insert(16, 'pid_6', 'sid_2', 'tid_994')
+box.insert(16, 'pid_6', 'sid_2', 'tid_994')
 ---
  - 'pid_6': {'sid_2', 'tid_994'}
 ...
-lua for k, v in box.space[16].index[1].next, box.space[16].index[1], 'sid_1' do print(v) end
+for k, v in box.space[16].index[1].next, box.space[16].index[1], 'sid_1' do print(v) end
 ---
 'pid_3': {'sid_1', 'tid_997'}
 'pid_2': {'sid_1', 'tid_998'}
@@ -226,7 +274,7 @@ lua for k, v in box.space[16].index[1].next, box.space[16].index[1], 'sid_1' do 
 'pid_5': {'sid_2', 'tid_995'}
 'pid_4': {'sid_2', 'tid_996'}
 ...
-lua for k, v in box.space[16].index[1].prev, box.space[16].index[1], 'sid_2' do print(v) end
+for k, v in box.space[16].index[1].prev, box.space[16].index[1], 'sid_2' do print(v) end
 ---
 'pid_4': {'sid_2', 'tid_996'}
 'pid_5': {'sid_2', 'tid_995'}
@@ -235,271 +283,271 @@ lua for k, v in box.space[16].index[1].prev, box.space[16].index[1], 'sid_2' do 
 'pid_2': {'sid_1', 'tid_998'}
 'pid_3': {'sid_1', 'tid_997'}
 ...
-lua for k, v in box.space[16].index[1].next_equal, box.space[16].index[1], 'sid_1' do print(v) end
+for k, v in box.space[16].index[1].next_equal, box.space[16].index[1], 'sid_1' do print(v) end
 ---
 'pid_3': {'sid_1', 'tid_997'}
 'pid_2': {'sid_1', 'tid_998'}
 'pid_1': {'sid_1', 'tid_999'}
 ...
-lua for k, v in box.space[16].index[1].prev_equal, box.space[16].index[1], 'sid_1' do print(v) end
+for k, v in box.space[16].index[1].prev_equal, box.space[16].index[1], 'sid_1' do print(v) end
 ---
 'pid_1': {'sid_1', 'tid_999'}
 'pid_2': {'sid_1', 'tid_998'}
 'pid_3': {'sid_1', 'tid_997'}
 ...
-lua for k, v in box.space[16].index[1].next_equal, box.space[16].index[1], 'sid_2' do print(v) end
+for k, v in box.space[16].index[1].next_equal, box.space[16].index[1], 'sid_2' do print(v) end
 ---
 'pid_6': {'sid_2', 'tid_994'}
 'pid_5': {'sid_2', 'tid_995'}
 'pid_4': {'sid_2', 'tid_996'}
 ...
-lua for k, v in box.space[16].index[1].prev_equal, box.space[16].index[1], 'sid_2' do print(v) end
+for k, v in box.space[16].index[1].prev_equal, box.space[16].index[1], 'sid_2' do print(v) end
 ---
 'pid_4': {'sid_2', 'tid_996'}
 'pid_5': {'sid_2', 'tid_995'}
 'pid_6': {'sid_2', 'tid_994'}
 ...
-lua box.space[16]:truncate()
+box.space[16]:truncate()
 ---
 ...
-lua box.insert(17, 1, 1, 1)
+box.insert(17, 1, 1, 1)
 ---
  - 1: {1, 1}
 ...
-lua box.insert(17, 2, 2, 0)
+box.insert(17, 2, 2, 0)
 ---
  - 2: {2, 0}
 ...
-lua box.insert(17, 3, 2, 1)
+box.insert(17, 3, 2, 1)
 ---
  - 3: {2, 1}
 ...
-lua box.insert(17, 4, 3, 0)
+box.insert(17, 4, 3, 0)
 ---
  - 4: {3, 0}
 ...
-lua box.insert(17, 5, 3, 1)
+box.insert(17, 5, 3, 1)
 ---
  - 5: {3, 1}
 ...
-lua box.insert(17, 6, 3, 2)
+box.insert(17, 6, 3, 2)
 ---
  - 6: {3, 2}
 ...
-lua box.space[17].index[1]:count(1)
+box.space[17].index[1]:count(1)
 ---
  - 1
 ...
-lua box.space[17].index[1]:count(2)
+box.space[17].index[1]:count(2)
 ---
  - 2
 ...
-lua box.space[17].index[1]:count(2, 1)
+box.space[17].index[1]:count(2, 1)
 ---
  - 1
 ...
-lua box.space[17].index[1]:count(2, 2)
+box.space[17].index[1]:count(2, 2)
 ---
  - 0
 ...
-lua box.space[17].index[1]:count(3)
+box.space[17].index[1]:count(3)
 ---
  - 3
 ...
-lua box.space[17].index[1]:count(3, 3)
+box.space[17].index[1]:count(3, 3)
 ---
  - 0
 ...
-lua box.space[17].index[1]:count()
+box.space[17].index[1]:count()
 ---
 error: 'index.count(): one or more arguments expected'
 ...
-lua box.space[17]:truncate()
+box.space[17]:truncate()
 ---
 ...
-lua box.space[18]:truncate()
+box.space[18]:truncate()
 ---
 ...
-lua box.auto_increment(18, 'a')
----
- - 1: {'a'}
-...
-lua box.insert(18, 5)
----
- - 5: {}
-...
-lua box.auto_increment(18, 'b')
----
- - 6: {'b'}
-...
-lua box.auto_increment(18, 'c')
----
- - 7: {'c'}
-...
-lua box.space[18]:truncate()
----
-...
-lua box.space[25]:truncate()
----
-...
-lua box.auto_increment(25, 'a')
+box.auto_increment(18, 'a')
 ---
  - 1: {'a'}
 ...
-lua box.insert(25, tonumber64(5))
+box.insert(18, 5)
 ---
  - 5: {}
 ...
-lua box.auto_increment(25, 'b')
+box.auto_increment(18, 'b')
 ---
  - 6: {'b'}
 ...
-lua box.auto_increment(25, 'c')
+box.auto_increment(18, 'c')
 ---
  - 7: {'c'}
 ...
-lua box.space[25]:truncate()
+box.space[18]:truncate()
 ---
 ...
-lua t=box.insert(12, '1', '2', '3', '4', '5', '6', '7')
+box.space[25]:truncate()
 ---
 ...
-lua t:transform(7, 0, '8', '9', '100')
+box.auto_increment(25, 'a')
+---
+ - 1: {'a'}
+...
+box.insert(25, tonumber64(5))
+---
+ - 5: {}
+...
+box.auto_increment(25, 'b')
+---
+ - 6: {'b'}
+...
+box.auto_increment(25, 'c')
+---
+ - 7: {'c'}
+...
+box.space[25]:truncate()
+---
+...
+t=box.insert(12, '1', '2', '3', '4', '5', '6', '7')
+---
+...
+t:transform(7, 0, '8', '9', '100')
 ---
  - '1': {'2', '3', '4', '5', '6', '7', '8', '9', '100'}
 ...
-lua t:transform(0, 1)
+t:transform(0, 1)
 ---
  - '2': {'3', '4', '5', '6', '7'}
 ...
-lua t:transform(1, 4)
+t:transform(1, 4)
 ---
  - '1': {'6', '7'}
 ...
-lua t:transform(-1, 1)
+t:transform(-1, 1)
 ---
  - '1': {'2', '3', '4', '5', '6'}
 ...
-lua t:transform(-3, 2)
+t:transform(-3, 2)
 ---
  - '1': {'2', '3', '4', '7'}
 ...
-lua t:transform(0, 0, 'A')
+t:transform(0, 0, 'A')
 ---
  - 'A': {'1', '2', '3', '4', '5', '6', '7'}
 ...
-lua t:transform(-1, 0, 'A')
+t:transform(-1, 0, 'A')
 ---
  - '1': {'2', '3', '4', '5', '6', 'A', '7'}
 ...
-lua t:transform(0, 1, 'A')
+t:transform(0, 1, 'A')
 ---
  - 'A': {'2', '3', '4', '5', '6', '7'}
 ...
-lua t:transform(-1, 1, 'B')
+t:transform(-1, 1, 'B')
 ---
  - '1': {'2', '3', '4', '5', '6', 'B'}
 ...
-lua t:transform(0, 2, 'C')
+t:transform(0, 2, 'C')
 ---
  - 'C': {'3', '4', '5', '6', '7'}
 ...
-lua t:transform(2, 0, 'hello')
+t:transform(2, 0, 'hello')
 ---
  - '1': {'2', 'hello', '3', '4', '5', '6', '7'}
 ...
-lua t:transform(0, -1, 'C')
+t:transform(0, -1, 'C')
 ---
 error: 'tuple.transform(): len is negative'
 ...
-lua t:transform(0, 100)
+t:transform(0, 100)
 ---
  - '': {}
 ...
-lua t:transform(-100, 1)
+t:transform(-100, 1)
 ---
 error: 'tuple.transform(): offset is out of bound'
 ...
-lua t:transform(0, 3, 1, 2, 3)
+t:transform(0, 3, 1, 2, 3)
 ---
  - 1: {2, 3, '4', '5', '6', '7'}
 ...
-lua t:transform(3, 1, tonumber64(4))
+t:transform(3, 1, tonumber64(4))
 ---
  - '1': {'2', '3', 4, '5', '6', '7'}
 ...
-lua t:transform(0, 1, {})
+t:transform(0, 1, {})
 ---
 error: 'tuple.transform(): unsupported field type ''table'''
 ...
-lua t=box.insert(12, 'A', '2', '3', '4', '3', '2', '5', '6', '3', '7')
+t=box.insert(12, 'A', '2', '3', '4', '3', '2', '5', '6', '3', '7')
 ---
 ...
-lua t:find('2')
+t:find('2')
 ---
  - 1
 ...
-lua t:find('4')
+t:find('4')
 ---
  - 3
 ...
-lua t:find('5')
+t:find('5')
 ---
  - 6
 ...
-lua t:find('A')
+t:find('A')
 ---
  - 0
 ...
-lua t:find('0')
+t:find('0')
 ---
 ...
-lua t:findall('A')
+t:findall('A')
 ---
  - 0
 ...
-lua t:findall('2')
+t:findall('2')
 ---
  - 1
  - 5
 ...
-lua t:findall('3')
+t:findall('3')
 ---
  - 2
  - 4
  - 8
 ...
-lua t:findall('0')
+t:findall('0')
 ---
 ...
-lua t:find(2, '2')
+t:find(2, '2')
 ---
  - 5
 ...
-lua t:find(89, '2')
+t:find(89, '2')
 ---
 ...
-lua t:findall(4, '3')
+t:findall(4, '3')
 ---
  - 4
  - 8
 ...
-lua t=box.insert(12, 'Z', '2', 2, 3, tonumber64(2))
+t=box.insert(12, 'Z', '2', 2, 3, tonumber64(2))
 ---
 ...
-lua t:find(2)
+t:find(2)
 ---
  - 2
 ...
-lua t:find(tonumber64(2))
+t:find(tonumber64(2))
 ---
  - 4
 ...
-lua t:find('2')
+t:find('2')
 ---
  - 1
 ...
-lua box.space[12]:truncate()
+box.space[12]:truncate()
 ---
 ...
 #
@@ -507,71 +555,71 @@ lua box.space[12]:truncate()
 # transform returns wrong tuple and put broken reply into socket
 # https://bugs.launchpad.net/tarantool/+bug/1038784
 #
-lua dofile('push.lua')
+dofile('push.lua')
 ---
 ...
-lua push_collection(0, 1038784, 'hello')
+push_collection(0, 1038784, 'hello')
 ---
  - 1038784: {'hello'}
 ...
-lua push_collection(0, 1038784, 'hello')
+push_collection(0, 1038784, 'hello')
 ---
  - 1038784: {}
 ...
-lua push_collection(0, 1038784, 'hello')
+push_collection(0, 1038784, 'hello')
 ---
  - 1038784: {}
 ...
-lua push_collection(1, 1038784, 'hi')
+push_collection(1, 1038784, 'hi')
 ---
  - 1038784: {26984}
 ...
-lua push_collection(2, 1038784, 'hi')
+push_collection(2, 1038784, 'hi')
 ---
  - 1038784: {26984, 26984}
 ...
-lua push_collection(2, 1038784, 'hi')
+push_collection(2, 1038784, 'hi')
 ---
  - 1038784: {26984, 26984}
 ...
-lua push_collection(5, 1038784, 'hey')
+push_collection(5, 1038784, 'hey')
 ---
  - 1038784: {26984, 26984, 'hey'}
 ...
-lua push_collection(5, 1038784, 'hey')
+push_collection(5, 1038784, 'hey')
 ---
  - 1038784: {26984, 26984, 'hey', 'hey'}
 ...
-lua push_collection(5, 1038784, 'hey')
+push_collection(5, 1038784, 'hey')
 ---
  - 1038784: {26984, 26984, 'hey', 'hey', 'hey'}
 ...
-lua push_collection(5, 1038784, 'hey')
+push_collection(5, 1038784, 'hey')
 ---
  - 1038784: {26984, 'hey', 'hey', 'hey', 'hey'}
 ...
 # A test case for Bug#1060967: truncation of 64-bit numbers
-lua box.space[5]:insert(2^51, 'hello', 'world')
+box.space[5]:insert(2^51, 'hello', 'world')
 ---
  - 2251799813685248: {'hello', 'world'}
 ...
-lua box.space[5]:select(0, 2^51)
+box.space[5]:select(0, 2^51)
 ---
  - 2251799813685248: {'hello', 'world'}
 ...
-lua box.space[5]:truncate()
+box.space[5]:truncate()
 ---
 ...
 # Test that we print index number in error ER_INDEX_VIOLATION
-lua box.space[1]:insert(1, 'hello', 'world')
+box.space[1]:insert(1, 'hello', 'world')
 ---
  - 1: {'hello', 'world'}
 ...
-lua box.space[1]:insert(2, 'hello', 'world')
+box.space[1]:insert(2, 'hello', 'world')
 ---
 error: 'Duplicate key exists in unique index 1'
 ...
-lua box.space[1]:truncate()
+box.space[1]:truncate()
 ---
 ...
 #
@@ -579,33 +627,33 @@ lua box.space[1]:truncate()
 # Truncate hangs when primary key is not in linear or starts at the first field
 # https://bugs.launchpad.net/tarantool/+bug/1042798
 #
-lua for k, f in pairs(box.space[23].index[0].key_field) do print(k, ' => ', f.fieldno) end
+for k, f in pairs(box.space[23].index[0].key_field) do print(k, ' => ', f.fieldno) end
 ---
 0 => 2
 1 => 1
 ...
-lua box.insert(23, 1, 2, 3, 4)
+box.insert(23, 1, 2, 3, 4)
 ---
  - 1: {2, 3, 4}
 ...
-lua box.insert(23, 10, 20, 30, 40)
+box.insert(23, 10, 20, 30, 40)
 ---
  - 10: {20, 30, 40}
 ...
-lua box.insert(23, 20, 30, 40, 50)
+box.insert(23, 20, 30, 40, 50)
 ---
  - 20: {30, 40, 50}
 ...
-lua for _k, v in box.space[23]:pairs() do print(v) end
+for _k, v in box.space[23]:pairs() do print(v) end
 ---
 1: {2, 3, 4}
 10: {20, 30, 40}
 20: {30, 40, 50}
 ...
-lua box.space[23]:truncate()
+box.space[23]:truncate()
 ---
 ...
-lua for _k, v in box.space[23]:pairs() do print(v) end
+for _k, v in box.space[23]:pairs() do print(v) end
 ---
 ...
 
@@ -613,7 +661,7 @@ lua for _k, v in box.space[23]:pairs() do print(v) end
 # TreeIndex::random()
 #-----------------------------------------------------------------------------#
 
-lua index_random_test(26, 0)
+index_random_test(26, 0)
 ---
 all values have been found
  - true
@@ -623,8 +671,625 @@ all values have been found
 # HashIndex::random()
 #-----------------------------------------------------------------------------#
 
-lua index_random_test(26, 1)
+index_random_test(26, 1)
 ---
 all values have been found
  - true
+...
+
+#
+# A test case for Bug#1200228
+# https://bugs.launchpad.net/tarantool/+bug/1200228
+# box.auto_increment counter resets
+# Test for correct little-endian comparison of integer fields.
+# (unsigned)
+#
+for i = 1, 300 do box.insert(2, i, i) print(box.space[2].index[0]:max()) end
+---
+1: {1}
+2: {2}
+3: {3}
+4: {4}
+5: {5}
+6: {6}
+7: {7}
+8: {8}
+9: {9}
+10: {10}
+11: {11}
+12: {12}
+13: {13}
+14: {14}
+15: {15}
+16: {16}
+17: {17}
+18: {18}
+19: {19}
+20: {20}
+21: {21}
+22: {22}
+23: {23}
+24: {24}
+25: {25}
+26: {26}
+27: {27}
+28: {28}
+29: {29}
+30: {30}
+31: {31}
+32: {32}
+33: {33}
+34: {34}
+35: {35}
+36: {36}
+37: {37}
+38: {38}
+39: {39}
+40: {40}
+41: {41}
+42: {42}
+43: {43}
+44: {44}
+45: {45}
+46: {46}
+47: {47}
+48: {48}
+49: {49}
+50: {50}
+51: {51}
+52: {52}
+53: {53}
+54: {54}
+55: {55}
+56: {56}
+57: {57}
+58: {58}
+59: {59}
+60: {60}
+61: {61}
+62: {62}
+63: {63}
+64: {64}
+65: {65}
+66: {66}
+67: {67}
+68: {68}
+69: {69}
+70: {70}
+71: {71}
+72: {72}
+73: {73}
+74: {74}
+75: {75}
+76: {76}
+77: {77}
+78: {78}
+79: {79}
+80: {80}
+81: {81}
+82: {82}
+83: {83}
+84: {84}
+85: {85}
+86: {86}
+87: {87}
+88: {88}
+89: {89}
+90: {90}
+91: {91}
+92: {92}
+93: {93}
+94: {94}
+95: {95}
+96: {96}
+97: {97}
+98: {98}
+99: {99}
+100: {100}
+101: {101}
+102: {102}
+103: {103}
+104: {104}
+105: {105}
+106: {106}
+107: {107}
+108: {108}
+109: {109}
+110: {110}
+111: {111}
+112: {112}
+113: {113}
+114: {114}
+115: {115}
+116: {116}
+117: {117}
+118: {118}
+119: {119}
+120: {120}
+121: {121}
+122: {122}
+123: {123}
+124: {124}
+125: {125}
+126: {126}
+127: {127}
+128: {128}
+129: {129}
+130: {130}
+131: {131}
+132: {132}
+133: {133}
+134: {134}
+135: {135}
+136: {136}
+137: {137}
+138: {138}
+139: {139}
+140: {140}
+141: {141}
+142: {142}
+143: {143}
+144: {144}
+145: {145}
+146: {146}
+147: {147}
+148: {148}
+149: {149}
+150: {150}
+151: {151}
+152: {152}
+153: {153}
+154: {154}
+155: {155}
+156: {156}
+157: {157}
+158: {158}
+159: {159}
+160: {160}
+161: {161}
+162: {162}
+163: {163}
+164: {164}
+165: {165}
+166: {166}
+167: {167}
+168: {168}
+169: {169}
+170: {170}
+171: {171}
+172: {172}
+173: {173}
+174: {174}
+175: {175}
+176: {176}
+177: {177}
+178: {178}
+179: {179}
+180: {180}
+181: {181}
+182: {182}
+183: {183}
+184: {184}
+185: {185}
+186: {186}
+187: {187}
+188: {188}
+189: {189}
+190: {190}
+191: {191}
+192: {192}
+193: {193}
+194: {194}
+195: {195}
+196: {196}
+197: {197}
+198: {198}
+199: {199}
+200: {200}
+201: {201}
+202: {202}
+203: {203}
+204: {204}
+205: {205}
+206: {206}
+207: {207}
+208: {208}
+209: {209}
+210: {210}
+211: {211}
+212: {212}
+213: {213}
+214: {214}
+215: {215}
+216: {216}
+217: {217}
+218: {218}
+219: {219}
+220: {220}
+221: {221}
+222: {222}
+223: {223}
+224: {224}
+225: {225}
+226: {226}
+227: {227}
+228: {228}
+229: {229}
+230: {230}
+231: {231}
+232: {232}
+233: {233}
+234: {234}
+235: {235}
+236: {236}
+237: {237}
+238: {238}
+239: {239}
+240: {240}
+241: {241}
+242: {242}
+243: {243}
+244: {244}
+245: {245}
+246: {246}
+247: {247}
+248: {248}
+249: {249}
+250: {250}
+251: {251}
+252: {252}
+253: {253}
+254: {254}
+255: {255}
+256: {256}
+257: {257}
+258: {258}
+259: {259}
+260: {260}
+261: {261}
+262: {262}
+263: {263}
+264: {264}
+265: {265}
+266: {266}
+267: {267}
+268: {268}
+269: {269}
+270: {270}
+271: {271}
+272: {272}
+273: {273}
+274: {274}
+275: {275}
+276: {276}
+277: {277}
+278: {278}
+279: {279}
+280: {280}
+281: {281}
+282: {282}
+283: {283}
+284: {284}
+285: {285}
+286: {286}
+287: {287}
+288: {288}
+289: {289}
+290: {290}
+291: {291}
+292: {292}
+293: {293}
+294: {294}
+295: {295}
+296: {296}
+297: {297}
+298: {298}
+299: {299}
+300: {300}
+...
+box.space[2]:select_range(0, 300)
+---
+ - 1: {1}
+ - 2: {2}
+ - 3: {3}
+ - 4: {4}
+ - 5: {5}
+ - 6: {6}
+ - 7: {7}
+ - 8: {8}
+ - 9: {9}
+ - 10: {10}
+ - 11: {11}
+ - 12: {12}
+ - 13: {13}
+ - 14: {14}
+ - 15: {15}
+ - 16: {16}
+ - 17: {17}
+ - 18: {18}
+ - 19: {19}
+ - 20: {20}
+ - 21: {21}
+ - 22: {22}
+ - 23: {23}
+ - 24: {24}
+ - 25: {25}
+ - 26: {26}
+ - 27: {27}
+ - 28: {28}
+ - 29: {29}
+ - 30: {30}
+ - 31: {31}
+ - 32: {32}
+ - 33: {33}
+ - 34: {34}
+ - 35: {35}
+ - 36: {36}
+ - 37: {37}
+ - 38: {38}
+ - 39: {39}
+ - 40: {40}
+ - 41: {41}
+ - 42: {42}
+ - 43: {43}
+ - 44: {44}
+ - 45: {45}
+ - 46: {46}
+ - 47: {47}
+ - 48: {48}
+ - 49: {49}
+ - 50: {50}
+ - 51: {51}
+ - 52: {52}
+ - 53: {53}
+ - 54: {54}
+ - 55: {55}
+ - 56: {56}
+ - 57: {57}
+ - 58: {58}
+ - 59: {59}
+ - 60: {60}
+ - 61: {61}
+ - 62: {62}
+ - 63: {63}
+ - 64: {64}
+ - 65: {65}
+ - 66: {66}
+ - 67: {67}
+ - 68: {68}
+ - 69: {69}
+ - 70: {70}
+ - 71: {71}
+ - 72: {72}
+ - 73: {73}
+ - 74: {74}
+ - 75: {75}
+ - 76: {76}
+ - 77: {77}
+ - 78: {78}
+ - 79: {79}
+ - 80: {80}
+ - 81: {81}
+ - 82: {82}
+ - 83: {83}
+ - 84: {84}
+ - 85: {85}
+ - 86: {86}
+ - 87: {87}
+ - 88: {88}
+ - 89: {89}
+ - 90: {90}
+ - 91: {91}
+ - 92: {92}
+ - 93: {93}
+ - 94: {94}
+ - 95: {95}
+ - 96: {96}
+ - 97: {97}
+ - 98: {98}
+ - 99: {99}
+ - 100: {100}
+ - 101: {101}
+ - 102: {102}
+ - 103: {103}
+ - 104: {104}
+ - 105: {105}
+ - 106: {106}
+ - 107: {107}
+ - 108: {108}
+ - 109: {109}
+ - 110: {110}
+ - 111: {111}
+ - 112: {112}
+ - 113: {113}
+ - 114: {114}
+ - 115: {115}
+ - 116: {116}
+ - 117: {117}
+ - 118: {118}
+ - 119: {119}
+ - 120: {120}
+ - 121: {121}
+ - 122: {122}
+ - 123: {123}
+ - 124: {124}
+ - 125: {125}
+ - 126: {126}
+ - 127: {127}
+ - 128: {128}
+ - 129: {129}
+ - 130: {130}
+ - 131: {131}
+ - 132: {132}
+ - 133: {133}
+ - 134: {134}
+ - 135: {135}
+ - 136: {136}
+ - 137: {137}
+ - 138: {138}
+ - 139: {139}
+ - 140: {140}
+ - 141: {141}
+ - 142: {142}
+ - 143: {143}
+ - 144: {144}
+ - 145: {145}
+ - 146: {146}
+ - 147: {147}
+ - 148: {148}
+ - 149: {149}
+ - 150: {150}
+ - 151: {151}
+ - 152: {152}
+ - 153: {153}
+ - 154: {154}
+ - 155: {155}
+ - 156: {156}
+ - 157: {157}
+ - 158: {158}
+ - 159: {159}
+ - 160: {160}
+ - 161: {161}
+ - 162: {162}
+ - 163: {163}
+ - 164: {164}
+ - 165: {165}
+ - 166: {166}
+ - 167: {167}
+ - 168: {168}
+ - 169: {169}
+ - 170: {170}
+ - 171: {171}
+ - 172: {172}
+ - 173: {173}
+ - 174: {174}
+ - 175: {175}
+ - 176: {176}
+ - 177: {177}
+ - 178: {178}
+ - 179: {179}
+ - 180: {180}
+ - 181: {181}
+ - 182: {182}
+ - 183: {183}
+ - 184: {184}
+ - 185: {185}
+ - 186: {186}
+ - 187: {187}
+ - 188: {188}
+ - 189: {189}
+ - 190: {190}
+ - 191: {191}
+ - 192: {192}
+ - 193: {193}
+ - 194: {194}
+ - 195: {195}
+ - 196: {196}
+ - 197: {197}
+ - 198: {198}
+ - 199: {199}
+ - 200: {200}
+ - 201: {201}
+ - 202: {202}
+ - 203: {203}
+ - 204: {204}
+ - 205: {205}
+ - 206: {206}
+ - 207: {207}
+ - 208: {208}
+ - 209: {209}
+ - 210: {210}
+ - 211: {211}
+ - 212: {212}
+ - 213: {213}
+ - 214: {214}
+ - 215: {215}
+ - 216: {216}
+ - 217: {217}
+ - 218: {218}
+ - 219: {219}
+ - 220: {220}
+ - 221: {221}
+ - 222: {222}
+ - 223: {223}
+ - 224: {224}
+ - 225: {225}
+ - 226: {226}
+ - 227: {227}
+ - 228: {228}
+ - 229: {229}
+ - 230: {230}
+ - 231: {231}
+ - 232: {232}
+ - 233: {233}
+ - 234: {234}
+ - 235: {235}
+ - 236: {236}
+ - 237: {237}
+ - 238: {238}
+ - 239: {239}
+ - 240: {240}
+ - 241: {241}
+ - 242: {242}
+ - 243: {243}
+ - 244: {244}
+ - 245: {245}
+ - 246: {246}
+ - 247: {247}
+ - 248: {248}
+ - 249: {249}
+ - 250: {250}
+ - 251: {251}
+ - 252: {252}
+ - 253: {253}
+ - 254: {254}
+ - 255: {255}
+ - 256: {256}
+ - 257: {257}
+ - 258: {258}
+ - 259: {259}
+ - 260: {260}
+ - 261: {261}
+ - 262: {262}
+ - 263: {263}
+ - 264: {264}
+ - 265: {265}
+ - 266: {266}
+ - 267: {267}
+ - 268: {268}
+ - 269: {269}
+ - 270: {270}
+ - 271: {271}
+ - 272: {272}
+ - 273: {273}
+ - 274: {274}
+ - 275: {275}
+ - 276: {276}
+ - 277: {277}
+ - 278: {278}
+ - 279: {279}
+ - 280: {280}
+ - 281: {281}
+ - 282: {282}
+ - 283: {283}
+ - 284: {284}
+ - 285: {285}
+ - 286: {286}
+ - 287: {287}
+ - 288: {288}
+ - 289: {289}
+ - 290: {290}
+ - 291: {291}
+ - 292: {292}
+ - 293: {293}
+ - 294: {294}
+ - 295: {295}
+ - 296: {296}
+ - 297: {297}
+ - 298: {298}
+ - 299: {299}
+ - 300: {300}
+...
+box.space[2]:truncate()
+---
 ...

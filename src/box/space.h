@@ -29,6 +29,7 @@
  * SUCH DAMAGE.
  */
 #include "index.h"
+#include "key_def.h"
 #include <exception.h>
 
 #include <box/box.h>
@@ -38,11 +39,11 @@ struct tarantool_cfg;
 struct space {
 	Index *index[BOX_INDEX_MAX];
 	/** If not set (is 0), any tuple in the
-	 * space can have any number of fields (but
-	 * @sa max_fieldno). If set, Each tuple
+	 * space can have any number of fields.
+	 * If set, each tuple
 	 * must have exactly this many fields.
 	 */
-	u32 arity;
+	uint32_t arity;
 
 	/**
 	 * The number of indexes in the space.
@@ -50,37 +51,23 @@ struct space {
 	 * It is equal to the number of non-nil members of the index
 	 * array and defines the key_defs array size as well.
 	 */
-	u32 key_count;
+	uint32_t key_count;
 
 	/**
 	 * The descriptors for all indexes that belong to the space.
 	 */
 	struct key_def *key_defs;
 
-	/**
-	 * Field types of indexed fields. This is an array of size
-	 * field_count. If there are gaps, i.e. fields that do not
-	 * participate in any index and thus we cannot infer their
-	 * type, then respective array members have value UNKNOWN.
-	 * XXX: right now UNKNOWN is also set for fields which types
-	 * in two indexes contradict each other.
-	 */
-	enum field_data_type *field_types;
-
-	/**
-	 * Max field no which participates in any of the space indexes.
-	 * Each tuple in this space must have, therefore, at least
-	 * field_count fields.
-	 */
-	u32 max_fieldno;
-
 	/** Space number. */
-	u32 no;
+	uint32_t no;
+
+	/** Default tuple format used by this space */
+	struct tuple_format *format;
 };
 
 
 /** Get space ordinal number. */
-static inline u32 space_n(struct space *sp) { return sp->no; }
+static inline uint32_t space_n(struct space *sp) { return sp->no; }
 
 /**
  * @brief A single method to handle REPLACE, DELETE and UPDATE.
@@ -183,16 +170,12 @@ space_validate_tuple(struct space *sp, struct tuple *new_tuple);
  * @return NULL if index not found.
  */
 static inline Index *
-space_index(struct space *sp, u32 index_no)
+space_index(struct space *sp, uint32_t index_no)
 {
 	if (index_no < BOX_INDEX_MAX)
 		return sp->index[index_no];
 	return NULL;
 }
-
-/** Set index by index no. */
-void
-space_set_index(struct space *sp, u32 index_no, Index *idx);
 
 /**
  * Call a visitor function on every enabled space.
@@ -205,46 +188,33 @@ space_foreach(void (*func)(struct space *sp, void *udata), void *udata);
  *
  * @return NULL if space not found, otherwise space object.
  */
-struct space *space_by_n(u32 space_no);
+struct space *space_by_n(uint32_t space_no);
 
 static inline struct space *
-space_find(u32 space_no)
+space_find(uint32_t space_no)
 {
 	struct space *s = space_by_n(space_no);
 	if (s)
 		return s;
 
-	tnt_raise(ClientError, :ER_NO_SUCH_SPACE, space_no);
+	tnt_raise(ClientError, ER_NO_SUCH_SPACE, space_no);
 }
 
-
 /** Get key_def ordinal number. */
-static inline u32
+static inline uint32_t
 key_def_n(struct space *sp, struct key_def *kp)
 {
 	assert(kp >= sp->key_defs && kp < (sp->key_defs + sp->key_count));
 	return kp - sp->key_defs;
 }
 
-static inline u32
-space_max_fieldno(struct space *sp)
-{
-	return sp->max_fieldno;
-}
-
-static inline enum field_data_type
-space_field_type(struct space *sp, u32 no)
-{
-	return sp->field_types[no];
-}
-
-
 struct space *
-space_create(u32 space_no, struct key_def *key_defs, u32 key_count, u32 arity);
+space_new(uint32_t space_no, struct key_def *key_defs,
+	  uint32_t key_count, uint32_t arity);
 
 
 /** Get index ordinal number in space. */
-static inline u32
+static inline uint32_t
 index_n(Index *index)
 {
 	return key_def_n(index->space, index->key_def);
@@ -257,17 +227,6 @@ index_is_primary(Index *index)
 	return index_n(index) == 0;
 }
 
-/**
- * Secondary indexes are built in bulk after all data is
- * recovered. This flag indicates that the indexes are
- * already built and ready for use.
- */
-extern bool secondary_indexes_enabled;
-/**
- * Primary indexes are enabled only after reading the snapshot.
- */
-extern bool primary_indexes_enabled;
-
 void space_init(void);
 void space_free(void);
 int
@@ -277,13 +236,12 @@ void begin_build_primary_indexes(void);
 void end_build_primary_indexes(void);
 void build_secondary_indexes(void);
 
-
 static inline Index *
-index_find(struct space *sp, u32 index_no)
+index_find(struct space *sp, uint32_t index_no)
 {
 	Index *idx = space_index(sp, index_no);
 	if (idx == NULL)
-		tnt_raise(LoggedError, :ER_NO_SUCH_INDEX, index_no,
+		tnt_raise(LoggedError, ER_NO_SUCH_INDEX, index_no,
 			  space_n(sp));
 	return idx;
 }

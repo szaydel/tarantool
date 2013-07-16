@@ -23,7 +23,7 @@ sudo yum install gcc gcc-c++ gcc-objc cmake git readline-devel ncurses-devel bin
 4. Download & build tarantool source code:
 -------------
 
-git clone git://github.com/mailru/tarantool.git
+git clone git://github.com/tarantool/tarantool.git
 
 cd tarantool
 CC=gcc463 CXX=g++463 cmake . -DCMAKE_BUILD_TYPE=RelWithDebugInfo -DENABLE_CLIENT=true && make
@@ -51,5 +51,13 @@ mkdir ~/build/bin && ln -s /usr/bin/python26 ~/build/bin/python
 
 cd ~/build/tarantool/test
 PATH=~/build/bin:$PATH ./run
+
+8. Create RPM Packages
+-------------
+
+cmake .
+make rpm
+
+(packages are available from RPM/i386/ or RPM/x86_64/)
 
 -- EOF

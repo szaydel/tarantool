@@ -1,24 +1,29 @@
-TARANTOOL/BOX, http://tarantool.org
+TARANTOOL, http://tarantool.org
 
-Tarantool is a framework for in-memory key/value storage and
-Box is a yet another in-memory key-value database.
+Tarantool is an efficient in-memory NoSQL database and a
+Lua application server, blended.
 
-Key features of the pair include:
+Key features of the system:
+ * flexible data model
+ * multiple index types: HASH, TREE, BITSET
+ * optional persistency and strong data durability
  * log streaming replication
- * hot standby
- * a simple binary protocol, as well as emulation of memcached
-   protocol
- * extensibility and speed
+ * Lua functions, procedures, triggers, with
+   rich access to database API, JSON support,
+   inter-procedure and network communication libraries
+ * a command line client supporting simple SQL,
+   a native Lua console and Memcached text protocol.
 
-Caveats:
- * supported platforms are Linux/x86 and FreeBSD/x86
- * supported compilers are clang and gcc.
+Tarantool is ideal for data-enriched components of 
+scalable Web architecture: traditional database caches, queue
+servers, in-memory data store for hot data, and so on.
+
+Supported platforms are Linux/x86 and FreeBSD/x86, Mac OS X.
 
 COMPILATION AND INSTALL
 
-Tarantool is written in C and Objective C.
-To build, you will need GCC Objective C frontend
-(gcc-objc package on most systems) or Apple CLang compiler.
+Tarantool is written in C and C++.
+To build, you will need GCC or Apple CLang compiler.
 
 CMake is used for configuration management.
 3 standard CMake build types are supported:
@@ -37,6 +42,7 @@ a stack trace after a crash.
 
 Please follow these steps to compile Tarantool:
 
+tarantool $ git submodule init; git submodule update # if compiling from git
 tarantool $ cmake .
 tarantool $ make
 
@@ -60,7 +66,6 @@ simplest way to setup and start the server, but it requires a few
 additional Python modules:
  * daemon
  * pyyaml
- * pexpect.
 
 Once all pre-requisites are installed, try:
 
@@ -79,21 +84,18 @@ Alternatively, if a customized server configuration is required,
 you could follow these steps:
 
 ```
-tarantool $ emacs cfg/tarantool_box_cfg.cfg # edit the configuration
+tarantool $ emacs cfg/tarantool.cfg # edit the configuration
 # Initialize the storage directory, path to this directory
 # is specified in the configuration file:
-tarantool $ src/box/tarantool_box --config cfg/tarantool_box_cfg.cfg --init-storage
+tarantool $ src/box/tarantool_box --config cfg/tarantool.cfg --init-storage
 #
 # run
-tarantool $ src/box/tarantool_box --config cfg/tarantool_box_cfg.cfg
+tarantool $ src/box/tarantool_box --config cfg/tarantool.cfg
 ```
 
-Please report bugs at http://bugs.launchpad.net/tarantool.
+Please report bugs at http://bugs.launchpad.net/tarantool or
+http://github.com/tarantool/tarantool/issues
 We also warmly welcome your feedback in the discussion mailing
-list, tarantool-developers@lists.launchpad.net, however, please be
-warned: Launchpad silently deletes posts from non-subscribed
-members, thus please be sure to have subscribed to the list prior
-to posting.
+list, tarantool@googlegroups.com.
 
 Thank you for your interest in Tarantool!
-

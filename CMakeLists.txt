@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 2.6)
 
-project(tarantool)
+project(tarantool C CXX)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 set(CMAKE_INCLUDE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" ${CMAKE_INCLUDE_PATH})
+
 
 include(CheckLibraryExists)
 include(CheckIncludeFile)
@@ -11,9 +12,11 @@ include(CheckCCompilerFlag)
 include(CheckSymbolExists)
 include(CheckCSourceRuns)
 include(CheckCXXSourceRuns)
+include(CheckCSourceCompiles)
+include(CheckCXXSourceCompiles)
 include(TestBigEndian)
 include(CheckFunctionExists)
-include(CheckBuiltInFunctionExists)
+include(FindOptionalPackage)
 
 find_program(ECHO echo)
 find_program(XSLTPROC xsltproc)
@@ -27,14 +30,15 @@ find_program(CONFETTI confetti)
 find_program(LD ld)
 find_program(POD2MAN pod2man)
 
+
 #
 # This instructs the rest of the build system what product
 # and what modules to produce.
 #
 set (TARANTOOL_PRODUCT "box")
 set (TARANTOOL_MODULES "box")
-set (TARANTOOL_CLIENTS "tarantool_checksum")
-# Define PACKAGE macro in config.h
+set (TARANTOOL_CLIENTS "tarancheck" "tarantar")
+# Define PACKAGE macro in tarantool/config.h
 set (PACKAGE "Tarantool")
 
 #
@@ -47,8 +51,11 @@ if(NOT CMAKE_BUILD_TYPE)
         FORCE)
 endif()
 
-set(CMAKE_OBJC_FLAGS)
-set(CMAKE_OBJCXX_FLAGS)
+if(NOT DEFINED CMAKE_INSTALL_LIBDIR)
+  set(CMAKE_INSTALL_LIBDIR lib)
+endif(NOT DEFINED CMAKE_INSTALL_LIBDIR)
+
+set(PLUGIN_DIR "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/tarantool/plugins")
 
 include(cmake/utils.cmake)
 
@@ -76,27 +83,6 @@ check_function_exists(memrchr HAVE_MEMRCHR)
 # stack. Find whether or not it's present.
 check_library_exists("" __libc_stack_end "" HAVE_LIBC_STACK_END)
 
-set(HAVE_NON_C99_PTHREAD_H 0)
-if (CMAKE_COMPILER_IS_GNUCC)
-
-    set(CMAKE_REQUIRED_FLAGS "-std=gnu99 -Wall -fexceptions -pthread")
-    check_symbol_exists(__pthread_cleanup_routine pthread.h test1)
-
-    set(HAVE_NON_C99_PTHREAD_H OFF)
-    if (test1)
-        try_compile(HAVE_NON_C99_PTHREAD_H ${CMAKE_BINARY_DIR} 
-            ${CMAKE_SOURCE_DIR}/cmake/pthread-broken-inline-test.c
-            COMPILE_DEFINITIONS "-std=gnu99 -Wall -fexceptions")
-    endif()
-    unset(test1)
-
-    if (HAVE_NON_C99_PTHREAD_H)
-        message(WARNING "The system pthread.h is not compatible with the C99 mode."
-            "A special workaround will be used during compilation."
-            "If it does not work for you, please update system glibc.")
-    endif()
-endif()
-
 #
 # Enable 'make TAGS' target.
 #
@@ -106,21 +92,44 @@ add_custom_target(TAGS COMMAND ctags -R --langmap=ObjectiveC:.m -e -f TAGS
 #
 # Define PACKAGE_VERSION -- a string constant with tarantool version.
 #
-set (PACKAGE_VERSION "")
-execute_process (COMMAND ${GIT} describe HEAD
-    OUTPUT_VARIABLE PACKAGE_VERSION
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-#
-# Make sure the version is set even if building
-# out of source.
-#
 set (CPACK_PACKAGE_VERSION_MAJOR "1")
 set (CPACK_PACKAGE_VERSION_MINOR "5")
-set (CPACK_PACKAGE_VERSION_PATCH "0")
+set (CPACK_PACKAGE_VERSION_PATCH "3")
+
+set (PACKAGE_VERSION "")
+
+# Get git version only if source directory has .git repository, this
+# avoids git to search .git repository in parent
+# directories.
+#
+if (EXISTS "${CMAKE_SOURCE_DIR}/.git")
+	execute_process (COMMAND ${GIT} describe HEAD
+		OUTPUT_VARIABLE PACKAGE_VERSION
+		OUTPUT_STRIP_TRAILING_WHITESPACE
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    if (PACKAGE_VERSION STREQUAL "")
+        message (FATAL_ERROR "Failed to retrive git version.")
+    endif()
+endif()
+
+set (VERSION_FILE "${CMAKE_SOURCE_DIR}/VERSION")
+
+# Update version file or use it when there is no git
+# repository within sources (source tarballs).
+#
 if (PACKAGE_VERSION STREQUAL "")
-    set (PACKAGE_VERSION
-        "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}")
+    if (NOT EXISTS "${VERSION_FILE}")
+        message (FATAL_ERROR "Version file ${VERSION_FILE} does not exists.")
+    endif()
+    message (WARNING "Using version from version file ${VERSION_FILE}")
+	execute_process (COMMAND ${CAT} ${VERSION_FILE}
+		OUTPUT_VARIABLE PACKAGE_VERSION
+		OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if (PACKAGE_VERSION STREQUAL "")
+        message (FATAL_ERROR "Unable to retrive version from git or ${VERSION_FILE} file.")
+    endif()
+else()
+	file(WRITE ${VERSION_FILE} "${PACKAGE_VERSION}\n")
 endif()
 
 #
@@ -129,6 +138,7 @@ endif()
 include_directories("${PROJECT_SOURCE_DIR}")
 include_directories("${PROJECT_SOURCE_DIR}/include")
 include_directories("${PROJECT_BINARY_DIR}/include")
+include_directories("${PROJECT_SOURCE_DIR}/third_party")
 #
 # Specify prefixes
 #
@@ -140,6 +150,26 @@ if (NOT DEFINED CMAKE_LOCALSTATE_DIR)
 endif()
 if (NOT DEFINED CMAKE_MAN_DIR)
     set (CMAKE_MAN_DIR "man")
+endif()
+
+#
+# Specify system-specific Lua prefixes
+#
+if (NOT DEFINED LUA_SYSPATH)
+    set (LUA_SYSPATH "")
+endif()
+if (NOT DEFINED LUA_SYSCPATH)
+    set (LUA_SYSCPATH "")
+endif()
+
+#
+# Specify Tarantool modules Lua prefixes
+#
+if (NOT DEFINED LUA_LIBPATH)
+    set (LUA_LIBPATH "")
+endif()
+if (NOT DEFINED LUA_LIBCPATH)
+    set (LUA_LIBCPATH "")
 endif()
 
 #
@@ -184,16 +214,6 @@ if (ENABLE_STATIC)
     add_compile_flags("C;CXX" "-static")
 endif()
 
-#
-# On CentOS the default gcc is way older than gcc 4.6, required
-# to compile Tarantool. To make the package compiled with gcc 4.6
-# usable on a system which has only gcc 4.1, statically link with
-# builtin libgcc by default.
-#
-if (CMAKE_COMPILER_IS_GNUCC AND NOT CMAKE_COMPILER_IS_CLANG)
-    add_compile_flags("C;CXX;OBJC;OBJCXX" "-static-libgcc")
-endif()
-
 ##
 ## Third-Party libraries
 ##
@@ -212,32 +232,6 @@ add_custom_target(build_bundled_libs)
 # LibLUAJIT
 #
 include(luajit)
-
-#
-# LibOBJC
-#
-set (ENABLE_BUNDLED_LIBOBJC_DEFAULT ON)
-if (TARGET_OS_DARWIN)
-    set (ENABLE_BUNDLED_LIBOBJC_DEFAULT OFF)
-endif()
-option(ENABLE_BUNDLED_LIBOBJC "Enable building of the bundled libobjc" ${ENABLE_BUNDLED_LIBOBJC_DEFAULT})
-
-if (ENABLE_BUNDLED_LIBOBJC)
-    include(BuildLibOBJC)
-    libobjc_build()
-    add_dependencies(build_bundled_libs objc)
-    set(HAVE_LIBOBJC_BUNDLED ON)
-else()
-    if (CMAKE_COMPILER_IS_GNUCC)
-        # Use compiler's objc library
-        add_compile_flags("OBJC;OBJCXX" "-objc")
-        set(LIBOBJC_LIBRARIES objc)
-        message(STATUS "Use gcc Objective-C runtime")
-    else()
-        set(LIBOBJC_FIND_REQUIRED ON)
-        find_package(LibOBJC)
-    endif()
-endif()
 
 
 #
@@ -292,6 +286,7 @@ else()
     add_definitions("-DCORO_SJLJ")
 endif()
 
+
 #
 # LibGOPT
 #
@@ -301,6 +296,14 @@ libgopt_build()
 add_dependencies(build_bundled_libs gopt)
 
 #
+# LibCJSON
+#
+
+include(BuildLibCJSON)
+libcjson_build()
+add_dependencies(build_bundled_libs cjson)
+
+#
 # Third-Party misc
 #
 
@@ -308,6 +311,20 @@ include(BuildMisc)
 libmisc_build()
 add_dependencies(build_bundled_libs misc)
 
+option(ENABLE_RPM "Enable install of a RPM specific files" OFF)
+
+# cpack config. called package.cmake to avoid
+# conflicts with the global CPack.cmake (On MacOS X
+# file names are case-insensitive)
+#
+include (cmake/package.cmake)
+#
+# RPM build environment
+# CPACK is only used for .tar.gz package generation.
+# To build an RPM we need a source package,
+# so rpm.cmake depends on package.cmake.
+#
+include (cmake/rpm.cmake)
 
 add_subdirectory(cfg)
 add_subdirectory(connector)
@@ -320,8 +337,7 @@ add_subdirectory(doc)
 install (FILES README.md LICENSE doc/box-protocol.txt
          DESTINATION share/doc/tarantool)
 
-include (cmake/package.cmake)
-
+#
 # tarantool info summary (used in server version output)
 #
 set(TARANTOOL_OPTIONS "-DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}")
@@ -337,8 +353,8 @@ set(TARANTOOL_CXX_COMPILER ${CMAKE_CXX_COMPILER})
 # of the script to make sure all variables are set.
 #
 configure_file(
-    "${PROJECT_SOURCE_DIR}/include/config.h.cmake"
-    "${PROJECT_BINARY_DIR}/include/config.h"
+    "${PROJECT_SOURCE_DIR}/include/tarantool/config.h.cmake"
+    "${PROJECT_BINARY_DIR}/include/tarantool/config.h"
     )
 configure_file(
     "${PROJECT_SOURCE_DIR}/doc/tnt.ent.cmake"
@@ -358,8 +374,6 @@ message (STATUS "C_COMPILER: ${TARANTOOL_C_COMPILER}")
 message (STATUS "CXX_COMPILER: ${TARANTOOL_CXX_COMPILER}")
 message (STATUS "C_FLAGS:${TARANTOOL_C_FLAGS}")
 message (STATUS "CXX_FLAGS:${TARANTOOL_CXX_FLAGS}")
-message (STATUS "OBJC_FLAGS:${TARANTOOL_OBJC_FLAGS}")
-message (STATUS "OBJCXX_FLAGS:${TARANTOOL_OBJCXX_FLAGS}")
 message (STATUS "PREFIX: ${CMAKE_INSTALL_PREFIX}")
 message (STATUS "MODULES: ${TARANTOOL_MODULES}")
 message (STATUS "ENABLE_STATIC: ${ENABLE_STATIC}")
@@ -371,11 +385,11 @@ message (STATUS "ENABLE_TRACE: ${ENABLE_TRACE}")
 message (STATUS "ENABLE_BACKTRACE: ${ENABLE_BACKTRACE} (symbol resolve: ${HAVE_BFD})")
 message (STATUS "ENABLE_CLIENT: ${ENABLE_CLIENT}")
 message (STATUS "ENABLE_BUNDLED_LUAJIT: ${ENABLE_BUNDLED_LUAJIT}")
-message (STATUS "ENABLE_BUNDLED_LIBOBJC: ${ENABLE_BUNDLED_LIBOBJC}")
 message (STATUS "ENABLE_BUNDLED_LIBEV: ${ENABLE_BUNDLED_LIBEV}")
 message (STATUS "ENABLE_BUNDLED_LIBEIO: ${ENABLE_BUNDLED_LIBEIO}")
 message (STATUS "ENABLE_BUNDLED_LIBCORO: ${ENABLE_BUNDLED_LIBCORO}")
 message (STATUS "ENABLE_DOC: ${ENABLE_DOC}")
+list_optional_packages()
 message (STATUS "")
 message (STATUS "To view or modify configuration results, check out CMakeCache.txt.")
 message (STATUS "")

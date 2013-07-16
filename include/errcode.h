@@ -30,7 +30,7 @@
  */
 #include <stdint.h>
 
-#include <util.h>
+#include "tarantool/util.h"
 
 struct errcode_record {
 	const char *errstr;
@@ -55,8 +55,8 @@ enum { TNT_ERRMSG_MAX = 512 };
 	/*  2 */_(ER_ILLEGAL_PARAMS,		2, "Illegal parameters, %s") \
 	/*  3 */_(ER_SECONDARY,			2, "Can't modify data upon a request on the secondary port.") \
 	/*  4 */_(ER_TUPLE_IS_RO,		1, "Tuple is marked as read-only") \
-	/*  5 */_(ER_UNUSED5,			2, "Unused5") \
-	/*  6 */_(ER_UNUSED6,			2, "Unused6") \
+	/*  5 */_(ER_INDEX_TYPE,		2, "Unsupported index type: %s") \
+	/*  6 */_(ER_SPACE_EXISTS,		2, "Space %u already exists") \
 	/*  7 */_(ER_MEMORY_ISSUE,		1, "Failed to allocate %u bytes in %s for %s") \
 	/*  8 */_(ER_UNUSED8,			2, "Unused8") \
 	/*  9 */_(ER_INJECTION,			2, "Error injection '%s'") \
@@ -77,8 +77,8 @@ enum { TNT_ERRMSG_MAX = 512 };
 	/* 23 */_(ER_RESERVED23,		0, "Reserved23") \
 		/* end of silverproxy error codes */ \
 	/* 24 */_(ER_UNUSED24,			2, "Unused24") \
-	/* 25 */_(ER_TUPLE_IS_EMPTY,		2, "UPDATE error: the new tuple has no fields") \
-	/* 26 */_(ER_UNUSED26,			2, "Unused26") \
+	/* 25 */_(ER_UNUSED25,			2, "Unused25") \
+	/* 26 */_(ER_FIBER_STACK,		2, "Can not create a new fiber: recursion limit reached") \
 	/* 27 */_(ER_UNUSED27,			2, "Unused27") \
 	/* 28 */_(ER_UNUSED28,			2, "Unused28") \
 	/* 29 */_(ER_UNUSED29,			2, "Unused29") \
@@ -97,9 +97,9 @@ enum { TNT_ERRMSG_MAX = 512 };
 	/* 42 */_(ER_SPLICE,			2, "Field SPLICE error: %s") \
 	/* 43 */_(ER_TUPLE_IS_TOO_LONG,		2, "Tuple is too long %u") \
 	/* 44 */_(ER_UNKNOWN_UPDATE_OP,		2, "Unknown UPDATE operation") \
-	/* 45 */_(ER_EXACT_MATCH,		2, "Partial key in an exact match (key field count: %u, expected: %u)") \
+	/* 45 */_(ER_EXACT_MATCH,		2, "Invalid key part count in an exact match (expected %u, got %u)") \
 	/* 46 */_(ER_UNUSED46,			2, "Unused46") \
-	/* 47 */_(ER_KEY_PART_COUNT,		2, "Key part count %u is greater than index part count %u") \
+	/* 47 */_(ER_KEY_PART_COUNT,		2, "Invalid key part count (expected [0..%u], got %u)") \
 	/* 48 */_(ER_PROC_RET,			2, "Return type '%s' is not supported in the binary protocol") \
 	/* 49 */_(ER_TUPLE_NOT_FOUND,		2, "Tuple doesn't exist in index %u") \
 	/* 50 */_(ER_NO_SUCH_PROC,		2, "Procedure '%.*s' is not defined") \

@@ -1,10 +1,4 @@
 #
-# Check if ObjectiveC and ObjectiveC++ compilers work
-#
-include(CMakeTestOBJCCompiler)
-#include(CMakeTestOBJCXXCompiler)
-
-#
 # Check if the same compile family is used for both C and CXX
 #
 if (NOT (CMAKE_C_COMPILER_ID STREQUAL CMAKE_CXX_COMPILER_ID))
@@ -22,18 +16,27 @@ if (CMAKE_C_COMPILER_ID STREQUAL Clang)
     set(CMAKE_COMPILER_IS_GNUCXX OFF)
 endif()
 
-# Check GCC version:
-# GCC older than 4.6 is not supported.
-if (CMAKE_COMPILER_IS_GNUCC)
-    execute_process(COMMAND ${CMAKE_C_COMPILER} -dumpversion
-        OUTPUT_VARIABLE CC_VERSION)
-    if (CC_VERSION VERSION_GREATER 4.6 OR CC_VERSION VERSION_EQUAL 4.6)
-        message(STATUS
-            "${CMAKE_C_COMPILER} version >= 4.6 -- ${CC_VERSION}")
-    else()
-        message (FATAL_ERROR
-            "${CMAKE_C_COMPILER} version should be >= 4.6 -- ${CC_VERSION}")
-    endif()
+#
+# Check supported standards
+#
+if((NOT HAVE_STD_C11 AND NOT HAVE_STD_GNU99) OR
+   (NOT HAVE_STD_CXX11 AND NOT HAVE_STD_GNUXX0X))
+    set(CMAKE_REQUIRED_FLAGS "-std=c11")
+    check_c_source_compiles("int main(void) { return 0; }" HAVE_STD_C11)
+    set(CMAKE_REQUIRED_FLAGS "-std=gnu99")
+    check_c_source_compiles("int main(void) { return 0; }" HAVE_STD_GNU99)
+    set(CMAKE_REQUIRED_FLAGS "-std=c++11")
+    check_cxx_source_compiles("int main(void) { return 0; }" HAVE_STD_CXX11)
+    set(CMAKE_REQUIRED_FLAGS "-std=gnu++0x")
+    check_cxx_source_compiles("int main(void) { return 0; }" HAVE_STD_GNUXX0X)
+    set(CMAKE_REQUIRED_FLAGS "")
+endif()
+if((NOT HAVE_STD_C11 AND NOT HAVE_STD_GNU99) OR
+   (NOT HAVE_STD_CXX11 AND NOT HAVE_STD_GNUXX0X))
+    message (FATAL_ERROR
+        "${CMAKE_C_COMPILER} should support -std=c11 or -std=gnu99. "
+        "${CMAKE_CXX_COMPILER} should support -std=c++11 or -std=gnu++0x. "
+        "Please consider upgrade to gcc 4.5+ or clang 3.2+.")
 endif()
 
 #
@@ -79,50 +82,26 @@ if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_definitions("-DNDEBUG" "-DNVALGRIND")
 endif()
 
-#
-# Enable @try/@catch/@finaly syntax in Objective C code.
-#
-add_compile_flags("OBJC;OBJCXX"
-    "-fobjc-exceptions")
-
-#
-# Invoke C++ constructors/destructors in the Objective C class instances.
-#
-add_compile_flags("OBJCXX" "-fobjc-call-cxx-cdtors")
-
-#
-# Assume that all Objective-C message dispatches (e.g., [receiver message:arg])
-# ensure that the receiver is not nil. This allows for more efficient entry
-# points in the runtime to be used
-#
-if (CMAKE_COMPILER_IS_GNUCC)
-    add_compile_flags("OBJC;OBJCXX"
-        "-fno-nil-receivers")
-endif()
-
-if (CMAKE_COMPILER_IS_CLANG)
-    add_compile_flags("OBJC"
-        "-fobjc-nonfragile-abi"
-        "-fno-objc-legacy-dispatch")
-endif()
-
-if (CMAKE_COMPILER_IS_CLANGXX)
-    add_compile_flags("OBJCXX"
-        "-fobjc-nonfragile-abi"
-        "-fno-objc-legacy-dispatch")
-elseif(CMAKE_COMPILER_IS_GNUCXX)
-    # Suppress deprecated warnings in objc/runtime-deprecated.h
-    add_compile_flags("OBJCXX"
-        " -Wno-deprecated-declarations")
-endif()
-
 macro(enable_tnt_compile_flags)
     # Tarantool code is written in GNU C dialect.
     # Additionally, compile it with more strict flags than the rest
     # of the code.
 
-    add_compile_flags("C;OBJC" "-std=gnu99")
-    add_compile_flags("CXX;OBJCXX" "-std=gnu++11 -fno-rtti")
+    # Set standard
+    if (HAVE_STD_C11)
+        add_compile_flags("C" "-std=c11")
+    else()
+        add_compile_flags("C" "-std=gnu99")
+    endif()
+
+    if (HAVE_STD_CXX11)
+        add_compile_flags("CXX" "-std=c++11")
+    else()
+        add_compile_flags("CXX" "-std=gnu++0x")
+    endif()
+
+    # Disable Run-time type information
+    add_compile_flags("CXX" "-fno-rtti")
 
     add_compile_flags("C;CXX"
         "-Wall"
@@ -131,9 +110,21 @@ macro(enable_tnt_compile_flags)
         "-Wno-strict-aliasing"
     )
 
-    # Only add -Werror if it's a debug build, done by developers using GCC.
-    # Community builds should not cause extra trouble.
-    if (${CMAKE_BUILD_TYPE} STREQUAL "Debug" AND CMAKE_COMPILER_IS_GNUCC)
+    if (CMAKE_COMPILER_IS_GNUCXX)
+        # G++ bug. http://gcc.gnu.org/bugzilla/show_bug.cgi?id=31488
+        add_compile_flags("CXX"
+            "-Wno-invalid-offsetof"
+        )
+    endif()
+
+    add_definitions("-D__STDC_FORMAT_MACROS=1")
+    add_definitions("-D__STDC_LIMIT_MACROS=1")
+    add_definitions("-D__STDC_CONSTANT_MACROS=1")
+
+    # Only add -Werror if it's a debug build, done by developers.
+    # Release builds should not cause extra trouble.
+    if ((${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+        AND HAVE_STD_C11 AND HAVE_STD_CXX11)
         add_compile_flags("C;CXX" "-Werror")
     endif()
 endmacro(enable_tnt_compile_flags)
@@ -149,3 +140,38 @@ check_c_compiler_flag("-Wno-unused-value" CC_HAS_WNO_UNUSED_VALUE)
 check_c_compiler_flag("-fno-strict-aliasing" CC_HAS_FNO_STRICT_ALIASING)
 check_c_compiler_flag("-Wno-comment" CC_HAS_WNO_COMMENT)
 check_c_compiler_flag("-Wno-parentheses" CC_HAS_WNO_PARENTHESES)
+
+if (CMAKE_COMPILER_IS_CLANG OR CMAKE_COMPILER_IS_GNUCC)
+    set(HAVE_BUILTIN_CTZ 1)
+    set(HAVE_BUILTIN_CTZLL 1)
+    set(HAVE_BUILTIN_CLZ 1)
+    set(HAVE_BUILTIN_CLZLL 1)
+    set(HAVE_BUILTIN_POPCOUNT 1)
+    set(HAVE_BUILTIN_POPCOUNTLL 1)
+    set(HAVE_BUILTIN_BSWAP32 1)
+    set(HAVE_BUILTIN_BSWAP64 1)
+else()
+    set(HAVE_BUILTIN_CTZ 0)
+    set(HAVE_BUILTIN_CTZLL 0)
+    set(HAVE_BUILTIN_CLZ 0)
+    set(HAVE_BUILTIN_CLZLL 0)
+    set(HAVE_BUILTIN_POPCOUNT 0)
+    set(HAVE_BUILTIN_POPCOUNTLL 0)
+    set(HAVE_BUILTIN_BSWAP32 0)
+    set(HAVE_BUILTIN_BSWAP64 0)
+endif()
+
+if (NOT HAVE_BUILTIN_CTZ OR NOT HAVE_BUILTIN_CTZLL)
+    # Check if -D_GNU_SOURCE has been defined and add this flag to
+    # CMAKE_REQUIRED_DEFINITIONS in order to get check_prototype_definition work
+    get_property(var DIRECTORY PROPERTY COMPILE_DEFINITIONS)
+    list(FIND var "_GNU_SOURCE" var)
+    if (NOT var EQUAL -1)
+        set(CMAKE_REQUIRED_FLAGS "-Wno-error")
+        set(CMAKE_REQUIRED_DEFINITIONS "-D_GNU_SOURCE")
+        check_c_source_compiles("#include <string.h>\n#include <strings.h>\nint main(void) { return ffsl(0L); }"
+            HAVE_FFSL)
+        check_c_source_compiles("#include <string.h>\n#include <strings.h>\nint main(void) { return ffsll(0UL); }"
+            HAVE_FFSLL)
+    endif()
+endif()

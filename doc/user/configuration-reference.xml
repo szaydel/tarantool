@@ -25,7 +25,7 @@ the command line, or from the configuration file, but never from
 both.
 </para>
 
-<section>
+<section xml:id="command-line-options">
 <title>Command line options</title>
   <para>
     Tarantool follows the <citetitle
@@ -50,7 +50,7 @@ both.
       <para><option>--version</option>, <option>-V</option></para>
       <para>Print product name and version, for example:
         <programlisting><prompt>$ </prompt> ./tarantool_box --version
-Tarantool/Box 1.4.0-69-g45551dd
+Tarantool 1.4.0-69-g45551dd
         </programlisting>
         In this example:
         <simplelist>
@@ -83,7 +83,7 @@ Tarantool/Box 1.4.0-69-g45551dd
         xlink:href="http://www.kernel.org/pub/software/scm/git/docs/git-describe.html">git describe</link> to produce its version id, and
         this id can be used at any time to check out the
         corresponding source from our <link
-        xlink:href="git://github.com/mailru/tarantool.git">git repository</link>.
+        xlink:href="git://github.com/tarantool/tarantool.git">git repository</link>.
       </para></note>
     </listitem>
 
@@ -140,20 +140,6 @@ Tarantool/Box 1.4.0-69-g45551dd
       <filename>rc.d</filename> or <command>service</command> script
       responsible for server restart will also fail, thanks to this
       option.
-      </para>
-    </listitem>
-
-    <listitem>
-      <para><option xml:id="cat-option" xreflabel="--cat">--cat</option>
-      <userinput>snapshot.file</userinput></para>
-      <para>Print the snapshot file, pointed to by the argument,
-      in a human-readable form. For each log record, log sequence
-      number, time of entry, operation type and arguments are
-      printed out. Example:
-        <programlisting><prompt>$ </prompt>./tarantool_box --cat 00000000000000000002.xlog
-lsn:2 tm:1301572243.430 t:65534 127.0.0.1:52728 INSERT n:0&lt;"1:\x01\x00\x00\x00"&gt;
-lsn:3 tm:1301572287.509 t:65534 127.0.0.1:52728 INSERT n:0&lt;"1:\x01\x00\x00\x00", "hello"&gt;
-lsn:4 tm:1301572313.691 t:65534 127.0.0.1:52728 UPDATE_FIELDS n:0flags:00000000 &lt;"1:\x01\x00\x00\x00"&gt; [field_no:1 op:set &lt;"world"&gt;]</programlisting>
       </para>
     </listitem>
   </itemizedlist>
@@ -219,15 +205,15 @@ lsn:4 tm:1301572313.691 t:65534 127.0.0.1:52728 UPDATE_FIELDS n:0flags:00000000 
     Tarantool maintains a set of all allowed configuration
     parameters in two template files, which are easy to maintain
     and extend:
-    <filename xlink:href="https://github.com/mailru/tarantool/blob/master/cfg/core_cfg.cfg_tmpl">cfg/core_cfg.cfg_tmpl</filename>,
-    <filename xlink:href="https://github.com/mailru/tarantool/blob/master/mod/box/box_cfg.cfg_tmpl">src/box/box_cfg.cfg_tmpl</filename>.
+    <filename xlink:href="https://github.com/tarantool/tarantool/blob/master/cfg/core_cfg.cfg_tmpl">cfg/core_cfg.cfg_tmpl</filename>,
+    <filename xlink:href="https://github.com/tarantool/tarantool/blob/master/mod/box/box_cfg.cfg_tmpl">src/box/box_cfg.cfg_tmpl</filename>.
     These files can always be used as a reference for any
     parameter in this manual.
   </para>
 
   <para>In addition, two working examples can be found in the source tree:
-    <filename xlink:href="https://github.com/mailru/tarantool/blob/master/test/box/tarantool.cfg">test/box/tarantool.cfg</filename>,
-    <filename xlink:href="https://github.com/mailru/tarantool/blob/master/test/box_big/tarantool.cfg">test/box_big/tarantool.cfg</filename>.
+    <filename xlink:href="https://github.com/tarantool/tarantool/blob/master/test/box/tarantool.cfg">test/box/tarantool.cfg</filename>,
+    <filename xlink:href="https://github.com/tarantool/tarantool/blob/master/test/box_big/tarantool.cfg">test/box_big/tarantool.cfg</filename>.
   </para>
 
   <table frame='all' pgwide='1'>
@@ -272,6 +258,20 @@ lsn:4 tm:1301572313.691 t:65534 127.0.0.1:52728 UPDATE_FIELDS n:0flags:00000000 
         </row>
 
         <row>
+          <entry xml:id="script_dir" xreflabel="script_dir">script_dir</entry>
+          <entry>string</entry>
+          <entry>""</entry>
+          <entry>no</entry>
+          <entry>no</entry>
+          <entry>If this path is set, it is added to the Lua package
+          search path, so that instance-specific Lua scripts can
+          be loaded and executed. If the directory specified in
+          the path contains <filename>init.lua</filename> file, it
+          is loaded and executed at server start.
+          </entry>
+        </row>
+
+        <row>
           <entry xml:id="wal_dir" xreflabel="wal_dir">wal_dir</entry>
           <entry>string</entry>
           <entry>""</entry>
@@ -301,6 +301,17 @@ lsn:4 tm:1301572313.691 t:65534 127.0.0.1:52728 UPDATE_FIELDS n:0flags:00000000 
           turn off the coredump off when using ulimit</entry>
         </row>
 -->
+        <row>
+          <entry xml:id="bind_ipaddr" xreflabel="bind_ipaddr">bind_ipaddr</entry>
+          <entry>string</entry>
+          <entry><emphasis role="strong">"INADDR_ANY"</emphasis></entry>
+          <entry>no</entry>
+          <entry>no</entry>
+          <entry>The network interface to bind to. By default,
+          the server binds to all available addresses.
+          Applies to all ports opened by the server.
+          </entry>
+        </row>
         <row>
           <entry xml:id="primary_port" xreflabel="primary_port">primary_port</entry>
           <entry>integer</entry>
@@ -362,7 +373,7 @@ lsn:4 tm:1301572313.691 t:65534 127.0.0.1:52728 UPDATE_FIELDS n:0flags:00000000 
             targetptr="proctitle">server process title</olink>
             (what's shown in COMMAND column of <command>ps</command>
             and <command>top</command> commands). For example,
-            an unmodified Tarantool/Box process group looks like:
+            an unmodified Tarantool process group looks like:
             </para>
 <programlisting>kostja@shmita:~$ ps -a -o command | grep box
 tarantool_box: primary pri:33013 sec:33014 adm:33015</programlisting>
@@ -657,8 +668,17 @@ tarantool_box: primary@sessions pri:33013 sec:33014 adm:33015</programlisting>
           <entry>16384</entry>
           <entry>no</entry>
           <entry>no</entry>
-          <entry>The size of read-ahead buffer associated with
-              a client connection.</entry>
+          <entry>The size of read-ahead buffer associated with a
+          client connection. The larger is the buffer, the more
+          memory an active connection consumes and more requests
+          can be read from the operating system buffer in a single
+          system call. The rule of tumb is to make sure the buffer
+          can contain at least a few dozen requests. Therefore, if
+          a typical tuple in a request is large, e.g. a few
+          kilobytes or even megabytes, the readahead buffer should
+          be increased.  If batched request processing is not
+          used, it's prudent to leave this setting at its
+          default.</entry>
         </row>
 
         <row>
@@ -828,12 +848,8 @@ tarantool_box: primary@sessions pri:33013 sec:33014 adm:33015</programlisting>
             xreflabel="memcached_expire"/>
             Turn on tuple time-to-live support in
             <olink targetptr="memcached_space"/>. This
-            effectively turns Tarantool into a "persistent" implementation
-            of Memcached. Since a caching server has
-            significantly different purpose than a data server, in
-            this mode Tarantool turns off replication and does not
-            bind to <olink targetptr="primary_port"/> or <olink
-            targetptr="secondary_port"/>.
+            effectively turns Tarantool into a persistent,
+            replicated and scriptable implementation of Memcached.
           </entry>
         </row>
 

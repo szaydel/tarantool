@@ -26,9 +26,7 @@
  * THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include <pickle.h>
-#include <string.h>
-#include <stdlib.h>
+#include <stdint.h>
 
 #if !MH_SOURCE
 #define MH_UNDEF
@@ -39,7 +37,7 @@
  */
 #define mh_name _i32ptr
 struct mh_i32ptr_node_t {
-	i32 key;
+	uint32_t key;
 	void *val;
 };
 
@@ -49,54 +47,3 @@ struct mh_i32ptr_node_t {
 #define mh_eq(a, b, arg) ((a->key) == (b->key))
 #include <mhash.h>
 
-
-/*
- * Map: (i64) => (void *)
- */
-#define mh_name _i64ptr
-struct mh_i64ptr_node_t {
-	i64 key;
-	void *val;
-};
-
-#define mh_node_t struct mh_i64ptr_node_t
-#define mh_int_t u32
-#define mh_arg_t void *
-#define mh_hash(a, arg) ((u32)((a->key)>>33^(a->key)^(a->key)<<11))
-#define mh_eq(a, b, arg) ((a->key) == (b->key))
-#include <mhash.h>
-
-/*
- * Map: (char *) => (void *)
- */
-static inline int lstrcmp(const void *a, const void *b)
-{
-	unsigned int al, bl;
-
-	al = load_varint32(&a);
-	bl = load_varint32(&b);
-
-	if (al != bl)
-		return bl - al;
-	return memcmp(a, b, al);
-}
-#include <third_party/PMurHash.h>
-#define mh_name _lstrptr
-struct mh_lstrptr_node_t {
-	const void *key;
-	void *val;
-};
-
-#define mh_node_t struct mh_lstrptr_node_t
-#define mh_int_t u32
-#define mh_arg_t void *
-static inline u32
-mh_strptr_hash(const mh_node_t *a, mh_arg_t arg) {
-	(void) arg;
-	const void *_k = (a->key);
-	const u32 l = load_varint32(&_k);
-	return PMurHash32(13, _k, l);
-}
-#define mh_hash(a, arg) mh_strptr_hash(a, arg)
-#define mh_eq(a, b, arg) (lstrcmp(a->key, b->key) == 0)
-#include <mhash.h>

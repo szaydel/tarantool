@@ -28,6 +28,7 @@
  * THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include <stddef.h>
 #include <inttypes.h>
 
 struct lua_State;
@@ -110,5 +111,22 @@ tarantool_lua(struct lua_State *L,
  *
  */
 int luaL_pushnumber64(struct lua_State *L, uint64_t val);
+
+
+
+/**
+ * show plugin statistics (for admin port)
+ */
+struct tbuf;
+void show_plugins_stat(struct tbuf *out);
+
+/**
+ * @brief A palloc-like wrapper to allocate memory using lua_newuserdata
+ * @param ctx lua_State
+ * @param size a number of bytes to allocate
+ * @return a pointer to the allocated memory
+ */
+void *
+lua_region_alloc(void *ctx, size_t size);
 
 #endif /* INCLUDES_TARANTOOL_LUA_H */

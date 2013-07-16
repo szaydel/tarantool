@@ -28,11 +28,16 @@
  * THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include <util.h>
+#include "tarantool/util.h"
+
+#if defined(__cplusplus)
+extern "C" {
+#endif /* defined(__cplusplus) */
+
 /*
  * Box - data storage (spaces, indexes) and query
  * processor (INSERT, UPDATE, DELETE, SELECT, Lua)
- * subsystem of Tarantool/Box.
+ * subsystem of Tarantool.
  */
 
 struct txn;
@@ -44,7 +49,7 @@ struct tarantool_cfg;
 struct lua_State;
 
 /** To be called at program start. */
-void box_init(void);
+void box_init(bool init_storage);
 /** To be called at program end. */
 void box_free(void);
 
@@ -55,7 +60,7 @@ void box_free(void);
  * change when entering/leaving read-only mode
  * (master->slave propagation).
  */
-typedef void (*box_process_func)(struct port *, u32, const void *, u32);
+typedef void (*box_process_func)(struct port *port, struct request *request);
 /** For read-write operations. */
 extern box_process_func box_process;
 /** For read-only port. */
@@ -65,17 +70,15 @@ extern box_process_func box_process_ro;
  * Check storage-layer related options in the
  * configuration file.
  */
-i32 box_check_config(struct tarantool_cfg *conf);
+int
+box_check_config(struct tarantool_cfg *conf);
 /*
  * Take into effect storage-layer related
  * changes in the server configuration.
  */
-i32 box_reload_config(struct tarantool_cfg *old_conf, struct tarantool_cfg *new_conf);
+int
+box_reload_config(struct tarantool_cfg *old_conf, struct tarantool_cfg *new_conf);
 void box_lua_load_cfg(struct lua_State *L);
-/**
- * Ehm, this is a hack, shouldn't be here.
- */
-int box_cat(const char *filename);
 /**
  * Iterate over all spaces and save them to the
  * snapshot file.
@@ -99,5 +102,9 @@ enum {
 	BOX_INDEX_MAX = 10,
 	BOX_FIELD_MAX = UINT32_MAX
 };
+
+#if defined(__cplusplus)
+}
+#endif /* defined(__cplusplus) */
 
 #endif /* INCLUDES_TARANTOOL_BOX_H */

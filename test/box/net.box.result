@@ -1,0 +1,184 @@
+remote = box.net.box.new('localhost', box.cfg.primary_port, '0.5')
+---
+...
+type(remote)
+---
+ - table
+...
+remote:ping()
+---
+ - true
+...
+remote:ping()
+---
+ - true
+...
+box.net.box.ping(remote)
+---
+ - true
+...
+box.insert(0, 123, 'test1', 'test2')
+---
+ - 123: {'test1', 'test2'}
+...
+box.select(0, 0, 123)
+---
+ - 123: {'test1', 'test2'}
+...
+tuple = remote:select(0, 0, 123)
+---
+...
+remote:call('box.select', '0', '0', 123)
+---
+ - 123: {'test1', 'test2'}
+...
+tuple
+---
+ - 123: {'test1', 'test2'}
+...
+type(tuple)
+---
+ - userdata
+...
+#tuple
+---
+ - 3
+...
+box.update(0, 123, '=p', 1, 'test1-updated')
+---
+ - 123: {'test1-updated', 'test2'}
+...
+remote:update(0, 123, '=p', 2, 'test2-updated')
+---
+ - 123: {'test1-updated', 'test2-updated'}
+...
+box.insert(0, 123, 'test1', 'test2')
+---
+error: 'Duplicate key exists in unique index 0'
+...
+remote:insert(0, 123, 'test1', 'test2')
+---
+error: 'Duplicate key exists in unique index 0'
+...
+remote:insert(0, 345, 'test1', 'test2')
+---
+ - 345: {'test1', 'test2'}
+...
+remote:select(0, 0, 345)
+---
+ - 345: {'test1', 'test2'}
+...
+remote:call('box.select', '0', '0', 345)
+---
+ - 345: {'test1', 'test2'}
+...
+box.select(0, 0, 345)
+---
+ - 345: {'test1', 'test2'}
+...
+remote:replace(0, 345, 'test1-replaced', 'test2-replaced')
+---
+ - 345: {'test1-replaced', 'test2-replaced'}
+...
+box.select(0, 0, 345)
+---
+ - 345: {'test1-replaced', 'test2-replaced'}
+...
+remote:select_limit(0, 0, 0, 1000, 345)
+---
+ - 345: {'test1-replaced', 'test2-replaced'}
+...
+box.select_range(0, 0, 1000)
+---
+ - 123: {'test1-updated', 'test2-updated'}
+ - 345: {'test1-replaced', 'test2-replaced'}
+...
+remote:select_range(0, 0, 1000)
+---
+ - 123: {'test1-updated', 'test2-updated'}
+ - 345: {'test1-replaced', 'test2-replaced'}
+...
+box.select(0, 0, 345)
+---
+ - 345: {'test1-replaced', 'test2-replaced'}
+...
+remote:select(0, 0, 345)
+---
+ - 345: {'test1-replaced', 'test2-replaced'}
+...
+remote:timeout(0.5):select(0, 0, 345)
+---
+ - 345: {'test1-replaced', 'test2-replaced'}
+...
+remote:call('box.fiber.sleep', '.01')
+---
+...
+remote:timeout(0.01):call('box.fiber.sleep', '10')
+---
+ - nil
+...
+pstart = box.time()
+---
+...
+parallel = {}
+---
+...
+function parallel_foo(id) box.fiber.sleep(math.random() * .05) return id end
+---
+...
+parallel_foo('abc')
+---
+ - abc
+...
+for i = 1, 20 do box.fiber.resume(box.fiber.create(function() box.fiber.detach() local s = string.format('%07d', i) local so = remote:call('parallel_foo', s) table.insert(parallel, tostring(s == so[0]) ) end)) end
+---
+...
+for i = 1, 20 do if #parallel == 20 then break end box.fiber.sleep(0.1) end
+---
+...
+unpack(parallel)
+---
+ - true
+ - true
+ - true
+ - true
+ - true
+ - true
+ - true
+ - true
+ - true
+ - true
+ - true
+ - true
+ - true
+ - true
+ - true
+ - true
+ - true
+ - true
+ - true
+ - true
+...
+#parallel
+---
+ - 20
+...
+box.time() - pstart < 0.5
+---
+ - true
+...
+remote:close()
+---
+ - true
+...
+remote:close()
+---
+error: '[string "-- box_net.lua (internal file)..."]:404: box.net.box: already closed'
+...
+remote:ping()
+---
+error: '[string "-- box_net.lua (internal file)..."]:409: box.net.box: connection was closed'
+...
+box.space[0]:truncate()
+---
+...

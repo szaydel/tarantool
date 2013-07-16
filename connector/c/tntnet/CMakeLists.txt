@@ -66,7 +66,5 @@ set_target_properties(tntnet_shared PROPERTIES OUTPUT_NAME "tarantoolnet")
 # Install
 #----------------------------------------------------------------------------#
 
-# install static library
-install_targets(/lib tntnet)
-# install shared library
-install_targets(/lib tntnet_shared)
+install (TARGETS tntnet ARCHIVE DESTINATION lib)
+install (TARGETS tntnet_shared LIBRARY DESTINATION lib)

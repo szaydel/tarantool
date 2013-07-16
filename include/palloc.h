@@ -30,7 +30,11 @@
  */
 #include <stddef.h>
 #include <stdint.h>
-#include "util.h"
+#include "tarantool/util.h"
+
+#if defined(__cplusplus)
+extern "C" {
+#endif /* defined(__cplusplus) */
 
 #define PALLOC_POOL_NAME_MAXLEN 30
 
@@ -56,5 +60,15 @@ const char *palloc_name(struct palloc_pool *);
 size_t palloc_allocated(struct palloc_pool *);
 
 void palloc_stat(struct tbuf *buf);
+
+static inline void *
+palloc_region_alloc(void *ctx, size_t size)
+{
+	return palloc((struct palloc_pool *) ctx, size);
+}
+
+#if defined(__cplusplus)
+} /* extern "C" */
+#endif /* defined(__cplusplus) */
 
 #endif /* TARANTOOL_PALLOC_H_INCLUDED */

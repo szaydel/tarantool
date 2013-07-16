@@ -47,6 +47,10 @@
 #include <limits.h>
 #include <assert.h>
 
+#if defined(__cplusplus)
+extern "C" {
+#endif /* defined(__cplusplus) */
+
 enum {
 	/** How many bytes to store in one page */
 	BITSET_PAGE_DATA_SIZE = 160
@@ -147,7 +151,7 @@ bitset_page_and(struct bitset_page *dst, struct bitset_page *src)
 	bitset_word_t *d = (bitset_word_t *) bitset_page_data(dst);
 	bitset_word_t *s = (bitset_word_t *) bitset_page_data(src);
 
-	assert (BITSET_PAGE_DATA_SIZE % sizeof(bitset_word_t) == 0);
+	assert(BITSET_PAGE_DATA_SIZE % sizeof(bitset_word_t) == 0);
 	int cnt = BITSET_PAGE_DATA_SIZE / sizeof(bitset_word_t);
 	for (int i = 0; i < cnt; i++) {
 		*d++ &= *s++;
@@ -160,7 +164,7 @@ bitset_page_nand(struct bitset_page *dst, struct bitset_page *src)
 	bitset_word_t *d = (bitset_word_t *) bitset_page_data(dst);
 	bitset_word_t *s = (bitset_word_t *) bitset_page_data(src);
 
-	assert (BITSET_PAGE_DATA_SIZE % sizeof(bitset_word_t) == 0);
+	assert(BITSET_PAGE_DATA_SIZE % sizeof(bitset_word_t) == 0);
 	int cnt = BITSET_PAGE_DATA_SIZE / sizeof(bitset_word_t);
 	for (int i = 0; i < cnt; i++) {
 		*d++ &= ~*s++;
@@ -173,7 +177,7 @@ bitset_page_or(struct bitset_page *dst, struct bitset_page *src)
 	bitset_word_t *d = (bitset_word_t *) bitset_page_data(dst);
 	bitset_word_t *s = (bitset_word_t *) bitset_page_data(src);
 
-	assert (BITSET_PAGE_DATA_SIZE % sizeof(bitset_word_t) == 0);
+	assert(BITSET_PAGE_DATA_SIZE % sizeof(bitset_word_t) == 0);
 	int cnt = BITSET_PAGE_DATA_SIZE / sizeof(bitset_word_t);
 	for (int i = 0; i < cnt; i++) {
 		*d++ |= *s++;
@@ -186,5 +190,10 @@ bitset_page_dump(struct bitset_page *page, FILE *stream);
 #endif /* defined(DEBUG) */
 
 rb_proto(, bitset_pages_, bitset_pages_t, struct bitset_page)
+
+
+#if defined(__cplusplus)
+} /* extern "C" */
+#endif /* defined(__cplusplus) */
 
 #endif /* TARANTOOL_LIB_BITSET_PAGE_H_INCLUDED */

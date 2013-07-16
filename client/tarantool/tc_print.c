@@ -32,9 +32,11 @@
 #include <inttypes.h>
 #include <string.h>
 #include <ctype.h>
+#include <wctype.h>
 
 #include <unistd.h>
 #include <errno.h>
+
 
 #include <connector/c/include/tarantool/tnt.h>
 #include <connector/c/include/tarantool/tnt_xlog.h>
@@ -47,6 +49,8 @@
 #include "client/tarantool/tc_query.h"
 
 extern struct tc tc;
+
+/*##################### Base printing functions #####################*/
 
 void tc_print_tee(char *buf, size_t size) {
 	if (tc.tee_fd == -1)
@@ -94,12 +98,103 @@ void tc_printf(char *fmt, ...) {
 	}
 }
 
-static void tc_print_fields(struct tnt_tuple *tu) {
+/*##################### string functions #####################*/
+
+static int tc_str_valid(char *data, uint32_t size) {
+	int length;
+	wchar_t dest;
+
+	mbtowc(NULL, NULL, 0);
+	while ((length = mbtowc(&dest, data, size)) > -1 && size > 0) {
+		if (length == 0)
+			++length;
+		data += length;
+		size -= length;
+	}
+	if (length == -1)
+		return 0;
+	return 1;
+}
+
+void tc_print_string(char *data, uint32_t size, char lua)
+{
+	if (tc_str_valid(data, size)) {
+		wchar_t dest;
+		int length;
+		mbtowc (NULL, NULL, 0);
+		while ((length = mbtowc(&dest, data, size)) > -1 && size > 0) {
+			if (dest >= 0x20) {
+				if (lua)
+					switch (dest) {
+					case '\'':
+						tc_printf("\\\'");
+						break;
+					case '\\':
+						tc_printf("\\\\");
+						break;
+					default:
+						tc_printf ("%lc", dest);
+					}
+				else
+					tc_printf ("%lc", dest);
+			}
+			else {
+				switch (dest) {
+				case 0x00:
+					tc_printf("\\0");
+					length++;
+					/* Cause of mbtowc returns 0 when \0 */
+					break;
+				case 0x07:
+					tc_printf("\\a");
+					break;
+				case 0x08:
+					tc_printf("\\b");
+					break;
+				case 0x09:
+					tc_printf("\\t");
+					break;
+				case 0x0A:
+					tc_printf("\\n");
+					break;
+				case 0x0B:
+					tc_printf("\\v");
+					break;
+				case 0x0C:
+					tc_printf("\\f");
+					break;
+				case 0x0D:
+					tc_printf("\\r");
+					break;
+				default:
+					tc_printf("\\x%02lX",
+						(unsigned long int)dest);
+					break;
+				}
+			}
+			size -= length;
+			data += length;
+		}
+	}
+	else {
+		while (size-- > 0) {
+			tc_printf("\\x%02X", (unsigned char)*data);
+			data++;
+		}
+	}
+}
+
+/*##################### Tuple and Fields #####################*/
+/* tarantool */
+
+void tc_print_fields(struct tnt_tuple *tu)
+{
 	struct tnt_iter ifl;
 	tnt_iter(&ifl, tu);
 	while (tnt_next(&ifl)) {
 		if (TNT_IFIELD_IDX(&ifl) != 0)
 			tc_printf(", ");
+		tc_printf("'");
 		char *data = TNT_IFIELD_DATA(&ifl);
 		uint32_t size = TNT_IFIELD_SIZE(&ifl);
 		switch (size) {
@@ -110,13 +205,9 @@ static void tc_print_fields(struct tnt_tuple *tu) {
 			tc_printf("%"PRIu64, *((uint64_t*)data));
 			break;
 		default:
-			while (size-- > 0) {
-				if (0x20 <= *data && *data < 0x7f)
-					tc_printf("%c", *data++);
-				else
-					tc_printf("\\0x%02X", *data++);
-			}
+			tc_print_string(data, size, 0);
 		}
+		tc_printf("'");
 	}
 	if (ifl.status == TNT_ITER_FAIL)
 		tc_printf("<parsing error>");
@@ -141,46 +232,46 @@ void tc_print_list(struct tnt_list *l)
 	tnt_iter_free(&it);
 }
 
-static void
-tc_printer_tarantool(struct tnt_log_header_v11 *hdr,
-		     struct tnt_request *r)
+/* lua */
+
+void tc_print_lua_field(char *data, uint32_t size, char string)
 {
-	tc_printf("%s lsn: %"PRIu64", time: %f, len: %"PRIu32"\n",
-		  tc_query_type(r->h.type),
-		  hdr->lsn,
-		  hdr->tm,
-		  hdr->len);
-	switch (r->h.type) {
-	case TNT_OP_INSERT:
-		tc_print_tuple(&r->r.insert.t);
+	if (string)
+		goto _string;
+	switch (size){
+	case 4:
+		tc_printf("%"PRIu32, *((uint32_t*)data));
 		break;
-	case TNT_OP_DELETE:
-		tc_print_tuple(&r->r.del.t);
+	case 8:
+		tc_printf("%"PRIu64, *((uint64_t*)data));
 		break;
-	case TNT_OP_UPDATE:
-		tc_print_tuple(&r->r.update.t);
-		break;
+	default:
+_string:
+		tc_printf("\'");
+		tc_print_string(data, size, 1);
+		tc_printf("\'");
 	}
 }
 
-static void
-tc_printer_raw(struct tnt_log_header_v11 *hdr, struct tnt_request *r)
+void tc_print_lua_fields(struct tnt_tuple *tu)
 {
-	if (tc.opt.raw_with_headers) {
-		fwrite(&tnt_log_marker_v11,
-		       sizeof(tnt_log_marker_v11), 1, stdout);
+	struct tnt_iter ifl;
+	tnt_iter(&ifl, tu);
+	while (tnt_next(&ifl)) {
+		if ((TNT_IFIELD_IDX(&ifl)) != 0)
+			tc_printf(", ");
+		char *data = TNT_IFIELD_DATA(&ifl);
+		uint32_t size = TNT_IFIELD_SIZE(&ifl);
+		tc_print_lua_field(data, size, tc.opt.str_instead_int);
 	}
-	fwrite(hdr, sizeof(*hdr), 1, stdout);
-	fwrite(r->origin, r->origin_size, 1, stdout);
+	if (ifl.status == TNT_ITER_FAIL)
+		tc_printf("<parsing error>");
+	tnt_iter_free(&ifl);
 }
 
-tc_printerf_t tc_print_getcb(const char *name)
+void tc_print_lua_tuple(struct tnt_tuple *tu)
 {
-	if (name == NULL)
-		return tc_printer_tarantool;
-	if (!strcasecmp(name, "tarantool"))
-		return tc_printer_tarantool;
-	if (!strcasecmp(name, "raw"))
-		return tc_printer_raw;
-	return NULL;
+	tc_printf("{");
+	tc_print_lua_fields(tu);
+	tc_printf("}");
 }

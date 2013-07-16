@@ -6,8 +6,6 @@ Usage: tarantool_box [OPTIONS]
                           KEY
       --check-config      Check configuration file for errors
   -c, --config=FILE       path to configuration file (default: tarantool.cfg)
-      --cat=FILE          cat snapshot file to stdout in readable format and
-                          exit
       --init-storage      initialize storage (an empty snapshot file) and exit
   -v, --verbose           increase verbosity level in log messages
   -B, --background        redirect input/output streams to a log file and run as
@@ -15,7 +13,7 @@ Usage: tarantool_box [OPTIONS]
   -h, --help              display this help and exit
   -V, --version           print program version and exit
 
-Please visit project home page at http://launchpad.net/tarantool
+Please visit project home page at http://tarantool.org
 to see online documentation, submit bugs or contribute a patch.
 
 tarantool_box -h
@@ -26,8 +24,6 @@ Usage: tarantool_box [OPTIONS]
                           KEY
       --check-config      Check configuration file for errors
   -c, --config=FILE       path to configuration file (default: tarantool.cfg)
-      --cat=FILE          cat snapshot file to stdout in readable format and
-                          exit
       --init-storage      initialize storage (an empty snapshot file) and exit
   -v, --verbose           increase verbosity level in log messages
   -B, --background        redirect input/output streams to a log file and run as
@@ -35,7 +31,7 @@ Usage: tarantool_box [OPTIONS]
   -h, --help              display this help and exit
   -V, --version           print program version and exit
 
-Please visit project home page at http://launchpad.net/tarantool
+Please visit project home page at http://tarantool.org
 to see online documentation, submit bugs or contribute a patch.
 
 tarantool_box --cfg-get=custom_proc_title
@@ -74,18 +70,20 @@ tarantool_box --config=tarantool_bug750658.cfg --background
 tarantool_box: --background requires 'logger' configuration option to be set
 
 tarantool_box --version
-Tarantool/Box 1.minor.patch-<rev>-<commit>
+Tarantool 1.minor.patch-<rev>-<commit>
 Target: platform <build>
 Build options: flags
 Compiler: cc
 C_FLAGS: flags
+CXX_FLAGS: flags
 
 tarantool_box -V
-Tarantool/Box 1.minor.patch-<rev>-<commit>
+Tarantool 1.minor.patch-<rev>-<commit>
 Target: platform <build>
 Build options: flags
 Compiler: cc
 C_FLAGS: flags
+CXX_FLAGS: flags
 
 #
 # A test case for Bug#726778 "Gopt broke wal_dir and snap_dir: they are no
@@ -107,5 +105,5 @@ tarantool_box: done
 # not require a configuration file.
 
 tarantool_box --config=nonexists.cfg --cat=nonexists.xlog
-tarantool_box: access("nonexists.xlog"): No such file or directory
+tarantool_box: --cat: unknown option
 

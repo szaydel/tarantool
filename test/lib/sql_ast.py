@@ -30,8 +30,8 @@ ER = {
     2: "ER_ILLEGAL_PARAMS"      ,
     3: "ER_SECONDARY"           ,
     4: "ER_TUPLE_IS_RO"         ,
-    5: "ER_UNUSED5"             ,
-    6: "ER_UNUSED6"             ,
+    5: "ER_INDEX_TYPE"          ,
+    6: "ER_SPACE_EXISTS"        ,
     7: "ER_MEMORY_ISSUE"        ,
     8: "ER_UNUSED8"             ,
     9: "ER_INJECTION"           ,
@@ -50,8 +50,8 @@ ER = {
    22: "ER_RESERVED22"          ,
    23: "ER_RESERVED23"          ,
    24: "ER_UNUSED24"            ,
-   25: "ER_TUPLE_IS_EMPTY"      ,
-   26: "ER_UNUSED26"            ,
+   25: "ER_UNUSED25"            ,
+   26: "ER_FIBER_STACK"         ,
    27: "ER_UNUSED27"            ,
    28: "ER_UNUSED28"            ,
    29: "ER_UNUSED29"            ,
@@ -81,7 +81,7 @@ ER = {
    53: "ER_NO_SUCH_INDEX"       ,
    54: "ER_NO_SUCH_FIELD"       ,
    55: "ER_TUPLE_FOUND"         ,
-   56: "ER_INDEX_VIOLATION"     ,
+   56: "ER_UNUSED"              ,
    57: "ER_NO_SUCH_SPACE"
 }
 

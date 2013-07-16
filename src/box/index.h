@@ -28,28 +28,14 @@
  * THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#import "object.h"
 #include <stdbool.h>
-#include <util.h>
+#include "tarantool/util.h"
+
+#include "object.h"
+#include "key_def.h"
 
 struct tuple;
 struct space;
-
-/*
- * Possible field data types. Can't use STRS/ENUM macros for them,
- * since there is a mismatch between enum name (STRING) and type
- * name literal ("STR"). STR is already used as Objective C type.
- */
-enum field_data_type { UNKNOWN = 0, NUM, NUM64, STRING, field_data_type_MAX };
-extern const char *field_data_type_strs[];
-
-#define INDEX_TYPE(_)                                               \
-	_(HASH,    0)       /* HASH Index  */                       \
-	_(TREE,    1)       /* TREE Index  */                       \
-	_(BITSET,  2)       /* BITSET Index  */                     \
-
-ENUM(index_type, INDEX_TYPE);
-extern const char *index_type_strs[];
 
 /**
  * @abstract Iterator type
@@ -98,42 +84,27 @@ struct iterator {
 	void (*free)(struct iterator *);
 };
 
-/** Descriptor of a single part in a multipart key. */
-struct key_part {
-	u32 fieldno;
-	enum field_data_type type;
-};
+/**
+ * Check that the key has correct part count and correct part size
+ * for use in an index iterator.
+ *
+ * @param key_def key definition
+ * @param type iterator type (see enum iterator_type)
+ * @param key BER-encoded key
+ * @param part_count number of parts in \a key
+ */
+void
+key_validate(struct key_def *key_def, enum iterator_type type, const char *key,
+	     uint32_t part_count);
 
-/* Descriptor of a multipart key. */
-struct key_def {
-	/* Description of parts of a multipart index. */
-	struct key_part *parts;
-	/*
-	 * An array holding field positions in 'parts' array.
-	 * Imagine there is index[1] = { key_field[0].fieldno=5,
-	 * key_field[1].fieldno=3 }.
-	 * 'parts' array for such index contains data from
-	 * key_field[0] and key_field[1] respectively.
-	 * max_fieldno is 5, and cmp_order array holds offsets of
-	 * field 3 and 5 in 'parts' array: -1, -1, 0, -1, 1.
-	 */
-	u32 *cmp_order;
-	/* The size of the 'parts' array. */
-	u32 part_count;
-	/*
-	 * The size of 'cmp_order' array (= max fieldno in 'parts'
-	 * array).
-	 */
-	u32 max_fieldno;
-	bool is_unique;
-	enum index_type type;
-};
+/**
+ * Check that the supplied key is valid for a search in a unique
+ * index (i.e. the key must be fully specified).
+ */
+void
+primary_key_validate(struct key_def *key_def, const char *key,
+		     uint32_t part_count);
 
-/** Descriptor of index features. */
-struct index_traits
-{
-	bool allows_partial_key;
-};
 
 /**
  * The manner in which replace in a unique index must treat
@@ -141,16 +112,16 @@ struct index_traits
  * possibly present in the index.
  */
 enum dup_replace_mode {
-        /**
+	/**
 	 * If a duplicate is found, delete it and insert
 	 * a new tuple instead. Otherwise, insert a new tuple.
-         */
+	 */
 	DUP_REPLACE_OR_INSERT,
 	/**
 	 * If a duplicate is found, produce an error.
 	 * I.e. require that no old key exists with the same
 	 * value.
-         */
+	 */
 	DUP_INSERT,
 	/**
 	 * Unless a duplicate exists, throw an error.
@@ -158,77 +129,81 @@ enum dup_replace_mode {
 	DUP_REPLACE
 };
 
-@interface Index: tnt_Object {
-	/* Index features. */
-	struct index_traits *traits;
- @public
+class Index: public Object {
+public:
+
 	/* Index owner space */
 	struct space *space;
 	/* Description of a possibly multipart key. */
 	struct key_def *key_def;
+
+
+	/**
+	 * Allocate index instance.
+	 *
+	 * @param type     index type
+	 * @param key_def  key part description
+	 * @param space    space the index belongs to
+	 */
+	static Index *factory(enum index_type type, struct key_def *key_def,
+		      struct space *space);
+
+	/**
+	 * Initialize index instance.
+	 *
+	 * @param key_def  key part description
+	 * @param space    space the index belongs to
+	 */
+protected:
+	Index(struct key_def *key_def, struct space *space);
+
+public:
+	virtual ~Index();
+
+	/**
+	 * Two-phase index creation: begin building, add tuples, finish.
+	 */
+	virtual void beginBuild() = 0;
+	virtual void buildNext(struct tuple *tuple) = 0;
+	virtual void endBuild() = 0;
+	/** Build this index based on the contents of another index. */
+	virtual void build(Index *pk) = 0;
+	virtual size_t size() const = 0;
+	virtual struct tuple *min() const = 0;
+	virtual struct tuple *max() const = 0;
+	virtual struct tuple *random(uint32_t rnd) const = 0;
+	virtual struct tuple *findByKey(const char *key, uint32_t part_count) const = 0;
+	virtual struct tuple *findByTuple(struct tuple *tuple) const;
+	virtual struct tuple *replace(struct tuple *old_tuple,
+				      struct tuple *new_tuple,
+				      enum dup_replace_mode mode) = 0;
+	/**
+	 * Create a structure to represent an iterator. Must be
+	 * initialized separately.
+	 */
+	virtual struct iterator *allocIterator() const = 0;
+	virtual void initIterator(struct iterator *iterator,
+				  enum iterator_type type,
+				  const char *key, uint32_t part_count) const = 0;
+
+	inline struct iterator *position()
+	{
+		if (m_position == NULL)
+			m_position = allocIterator();
+		return m_position;
+	}
+protected:
+	static uint32_t
+	replace_check_dup(struct tuple *old_tuple,
+			  struct tuple *dup_tuple,
+			  enum dup_replace_mode mode);
+
+private:
 	/*
 	 * Pre-allocated iterator to speed up the main case of
 	 * box_process(). Should not be used elsewhere.
 	 */
-	struct iterator *position;
+	struct iterator *m_position;
 };
-
-/**
- * Get index traits.
- */
-+ (struct index_traits *) traits;
-/**
- * Allocate index instance.
- *
- * @param type     index type
- * @param key_def  key part description
- * @param space    space the index belongs to
- */
-+ (Index *) alloc: (enum index_type) type :(struct key_def *) key_def
-	:(struct space *) space;
-/**
- * Initialize index instance.
- *
- * @param key_def  key part description
- * @param space    space the index belongs to
- */
-- (id) init: (struct key_def *) key_def_arg :(struct space *) space_arg;
-/** Destroy and free index instance. */
-- (void) free;
-/**
- * Two-phase index creation: begin building, add tuples, finish.
- */
-- (void) beginBuild;
-- (void) buildNext: (struct tuple *)tuple;
-- (void) endBuild;
-/** Build this index based on the contents of another index. */
-- (void) build: (Index *) pk;
-- (size_t) size;
-- (struct tuple *) min;
-- (struct tuple *) max;
-- (struct tuple *) random: (u32) rnd;
-- (struct tuple *) findByKey: (const void *) key :(u32) part_count;
-- (struct tuple *) findByTuple: (struct tuple *) tuple;
-- (struct tuple *) replace: (struct tuple *) old_tuple
-			  :(struct tuple *) new_tuple
-			  :(enum dup_replace_mode) mode;
-/**
- * Create a structure to represent an iterator. Must be
- * initialized separately.
- */
-- (struct iterator *) allocIterator;
-- (void) initIterator: (struct iterator *) iterator
-		     :(enum iterator_type) type
-		     :(const void *) key :(u32) part_count;
-@end
-
-void
-check_key_parts(const struct key_def *key_def, u32 part_count,
-		bool partial_key_allowed);
-
-uint32_t
-replace_check_dup(struct tuple *old_tuple,
-		  struct tuple *dup_tuple,
-		  enum dup_replace_mode mode);
 
 #endif /* TARANTOOL_BOX_INDEX_H_INCLUDED */

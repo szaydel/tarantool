@@ -2,31 +2,35 @@ if (TARGET_OS_DARWIN)
     set(module_link_flags "-pagezero_size 10000 -image_base 100000000")
 endif()
 
-function(lua_source filename)
-    get_filename_component(module ${filename} NAME_WE)
-    ADD_CUSTOM_COMMAND(OUTPUT ${CMAKE_BINARY_DIR}/src/box/${filename}.c
-        COMMAND ${ECHO} 'const char ${module}_lua[] =' > ${filename}.new.c
-        COMMAND ${CMAKE_BINARY_DIR}/extra/txt2c
-            ${CMAKE_SOURCE_DIR}/src/box/${filename} >> ${filename}.new.c
-        COMMAND ${ECHO} '\;' >> ${filename}.new.c
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${filename}.new.c
-            ${CMAKE_BINARY_DIR}/src/box/${filename}.c
-        COMMAND ${CMAKE_COMMAND} -E remove ${filename}.new.c
-        DEPENDS ${CMAKE_SOURCE_DIR}/src/box/${filename} txt2c)
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/box/lua)
 
-    set(lua_sources ${lua_sources} ${CMAKE_BINARY_DIR}/src/box/${filename}.c
-        PARENT_SCOPE)
-endfunction()
+set(lua_sources)
+lua_source(lua_sources lua/box.lua)
+lua_source(lua_sources lua/box_net.lua)
+lua_source(lua_sources lua/misc.lua)
+lua_source(lua_sources lua/sql.lua)
 
-lua_source(box.lua)
-
-add_custom_target(generate_lua_sources}
+add_custom_target(box_generate_lua_sources
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/src/box
     DEPENDS ${lua_sources})
 set_property(DIRECTORY PROPERTY ADDITIONAL_MAKE_CLEAN_FILES ${lua_sources})
 
-tarantool_module("box" tuple.m index.m hash_index.m tree_index.m space.m
-    port.m request.m txn.m box.m ${lua_sources} box_lua.m box_lua_space.m
-    bitset_index.m)
+tarantool_module("box"
+    tuple.cc
+    tuple_convert.cc
+    tuple_update.cc
+    key_def.cc
+    index.cc
+    hash_index.cc
+    tree_index.cc
+    bitset_index.cc
+    space.cc
+    port.cc
+    request.cc
+    txn.cc
+    box.cc
+    ${lua_sources}
+    box_lua.cc
+    box_lua_space.cc)
 
 target_link_libraries(tarantool_box bitset)

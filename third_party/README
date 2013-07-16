@@ -11,11 +11,8 @@ cvs up
 How to update luajit
 ====================
 
-- download the latest release source tarball
-- replace the contents of the luajit directory 
-with the contents of the tarball
-- merge the original Makefile and the Makefile
-from the new tarball.
+Run from project root dir:
+git submodule update --reference v2.0.1-fixed -- third_party/luajit
 
 How to update libobjc2
 ======================
@@ -45,6 +42,8 @@ Note: we have two important changes to the stock libeio:
   set to 0 means the default stack size.
   A larger stack size is necessary to make getaddrinfo()
   work.
+
+- replace config.h with tarantool/config.h in eio.c
 
 Otherwise: cvs up
 

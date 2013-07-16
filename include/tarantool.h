@@ -29,7 +29,11 @@
  * SUCH DAMAGE.
  */
 #include <stdbool.h>
-#include <util.h>
+#include "tarantool/util.h"
+
+#if defined(__cplusplus)
+extern "C" {
+#endif /* defined(__cplusplus) */
 
 struct tarantool_cfg;
 struct tbuf;
@@ -38,10 +42,10 @@ extern int snapshot_pid;
 extern struct tarantool_cfg cfg;
 extern const char *cfg_filename;
 extern char *cfg_filename_fullpath;
-extern bool init_storage, booting;
+extern bool booting;
 extern char *binary_filename;
 extern char *custom_proc_title;
-i32 reload_cfg(struct tbuf *out);
+int reload_cfg(struct tbuf *out);
 void show_cfg(struct tbuf *out);
 int snapshot(void);
 const char *tarantool_version(void);
@@ -52,4 +56,12 @@ char **init_set_proc_title(int argc, char **argv);
 void free_proc_title(int argc, char **argv);
 void set_proc_title(const char *format, ...);
 void title(const char *fmt, ...);
+
+#define DEFAULT_CFG_FILENAME "tarantool.cfg"
+#define DEFAULT_CFG SYSCONF_DIR "/" DEFAULT_CFG_FILENAME
+
+#if defined(__cplusplus)
+} /* extern "C" */
+#endif /* defined(__cplusplus) */
+
 #endif /* TARANTOOL_H_INCLUDED */

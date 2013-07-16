@@ -7,12 +7,13 @@
       xmlns:xi="http://www.w3.org/2001/XInclude" 
       xmlns:xlink="http://www.w3.org/1999/xlink"
       xml:id="tarantool-user-guide">
-<title>Tarantool/Box User Guide, version &tnt_version;</title>
+<title>Tarantool User Guide, version &tnt_version;</title>
 <xi:include href="preface.xml"/>
 <xi:include href="tutorial.xml"/>
 <xi:include href="data-and-persistence.xml"/>
 <xi:include href="language-reference.xml"/>
 <xi:include href="replication.xml"/>
+<xi:include href="server-administration.xml"/>
 <xi:include href="configuration-reference.xml"/>
 <xi:include href="connectors.xml"/>
 <xi:include href="proctitle.xml"/>

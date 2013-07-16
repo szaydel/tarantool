@@ -32,7 +32,11 @@
 #include <stdarg.h>
 #include <errno.h>
 
-#include <util.h> /* for FORMAT_PRINTF */
+#include "tarantool/util.h" /* for FORMAT_PRINTF */
+
+#if defined(__cplusplus)
+extern "C" {
+#endif /* defined(__cplusplus) */
 
 enum say_level {
 	S_FATAL,		/* do not this value use directly */
@@ -47,12 +51,15 @@ extern int sayfd;
 extern pid_t logger_pid;
 
 void say_logger_init(int nonblock);
+
 void vsay(int level, const char *filename, int line, const char *error,
-	  const char *format, va_list ap)
-    __attribute__ ((format(FORMAT_PRINTF, 5, 0)));
-void _say(int level, const char *filename, int line, const char *error,
-	  const char *format, ...)
-    __attribute__ ((format(FORMAT_PRINTF, 5, 6)));
+          const char *format, va_list ap)
+          __attribute__ ((format(FORMAT_PRINTF, 5, 0)));
+
+typedef void (*sayfunc_t)(int level, const char *filename, int line, const char *error,
+                          const char *format, ...);
+
+extern sayfunc_t _say __attribute__ ((format(FORMAT_PRINTF, 5, 6)));
 
 #define say(level, ...) ({ _say(level, __FILE__, __LINE__, __VA_ARGS__); })
 
@@ -67,5 +74,8 @@ void _say(int level, const char *filename, int line, const char *error,
 #define say_debug(...)			say(S_DEBUG, NULL, __VA_ARGS__)
 
 
+#if defined(__cplusplus)
+} /* extern "C" */
+#endif /* defined(__cplusplus) */
 
 #endif /* TARANTOOL_SAY_H_INCLUDED */

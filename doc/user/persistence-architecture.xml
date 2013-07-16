@@ -3,7 +3,8 @@
 %tnt;
 ]>
 <section xmlns="http://docbook.org/ns/docbook" version="5.0"
-         xmlns:xlink="http://www.w3.org/1999/xlink">
+         xmlns:xlink="http://www.w3.org/1999/xlink"
+         xml:id="data-persistence">
 <title>Data persistence</title>
 <para>
 To maintain data persistence, Tarantool writes each data change
@@ -11,14 +12,15 @@ request (INSERT, UPDATE, DELETE) into a write-ahead log. WAL
 files have extension <filename>.xlog</filename> and are stored in <olink
 targetptr="wal_dir"/>. A new WAL file is created for every <olink
 targetptr="rows_per_wal"/> records.  Each INSERT, UPDATE or DELETE
-gets assigned a continuously growing 64-bit log sequence number. The name of the log file is based on the log sequence
+gets assigned a continuously growing 64-bit log sequence number.
+The name of the log file is based on the log sequence
 number of the first record this file contains.
 </para>
 
 <para>Apart from a log sequence number and the data change request
 (its format is the same as in the binary protocol and is described
 in <link
-xlink:href="https://github.com/mailru/tarantool/blob/master/doc/box-protocol.txt"><filename>doc/box-protocol.txt</filename></link>),
+xlink:href="https://github.com/tarantool/tarantool/blob/master/doc/box-protocol.txt"><filename>doc/box-protocol.txt</filename></link>),
 each WAL record contains a checksum and a UNIX time stamp.
 </para>
 
@@ -40,37 +42,51 @@ example:
     match the type of the index, the change is aborted.
     </para></listitem>
     <listitem><para>
-    The new tuple is marked 'invisible' and is added to
-    the primary and secondary indexes.
+    The new tuple replaces the old tuple in all
+    existing indexes.
     </para></listitem>
     <listitem><para>
-    A message is sent to <quote>wal_writer</quote>, running in a
-    separate thread, requesting that the change be recorded in the WAL.
-    The fiber associated with the current connection is suspended
-    until an acknowledgment from the WAL writer.
+    A message is sent to WAL writer running in a
+    separate thread, requesting that the change is recorded in the WAL.
+    The server switches to work on the next request until the write 
+    is acknowledged.
     </para></listitem>
     <listitem><para>
-    Upon success, the 'invisible' flag is cleared
-    and the original tuple is deleted. A response is sent to the
-    client. Upon failure, the new tuple is removed and <olink
-    targetptr="ER_WAL_IO"/> error is sent to the client.
+    On success, a confirmation is sent to the client. Upon
+    failure, a rollback procedure is begun.  During the rollback
+    procedure, the transaction processor rolls back all changes to
+    the database which occurred after the first failed change, from
+    latest to oldest, up to the first failed change. All rolled back
+    requests are aborted with <olink targetptr="ER_WAL_IO"/>
+    error. No new change is applied while rollback is in progress.
+    When the rollback procedure is finished, the servers restarts
+    the processing pipeline.
     </para></listitem>
 </orderedlist>
 </para>
 
 <para>
-The master and the WAL writer threads communicate using asynchronous (yet reliable)
-messaging; the master thread, not being blocked on
-WAL tasks, continues to handle requests quickly
-even at hight volumes of disk I/O. For instance, SELECT performance,
-provided SELECTs are run in their own connections, remains
-unaffected by disk load.
+One advantage of the described algorithm is that complete request
+pipelining is achieved, even for requests on the same value of the
+primary key. As a result, database performance doesn't degrade
+even if all requests touch upon the same key in the same space.
 </para>
 
 <para>
-WAL writer employs a number of modes for synchronization between
-requesting fibers, WAL writer and disk hardware, as defined
-in configuration for <olink targetptr="wal_mode"/>. It is also
+The transaction processor and the WAL writer threads communicate
+using asynchronous (yet reliable) messaging; the transaction
+processor thread, not being blocked on WAL tasks, continues to
+handle requests quickly even at high volumes of disk I/O. A
+response to a request is sent as soon as it is ready, even if
+there were earlier incomplete requests on the same connection.  In
+particular, SELECT performance, even for SELECTs running on a
+connection packed with UPDATEs and DELETEs, remains unaffected by
+disk load.
+</para>
+
+<para>
+WAL writer employs a number of durability modes, as defined
+in configuration variable <olink targetptr="wal_mode"/>. It is
 possible to turn the write ahead log completely off, by setting
 <olink targetptr="wal_mode"/> to <emphasis>none</emphasis>.
 Even without the write ahead log it's still possible to take a
