@@ -1,5 +1,5 @@
 import os
-import os.path
+import re
 import sys
 import stat
 import glob
@@ -9,6 +9,7 @@ import collections
 import difflib
 import filecmp
 import shlex
+import shutil
 import time
 
 from server import Server
@@ -77,17 +78,17 @@ class Test:
 
     def __init__(self, name, args, suite_ini):
         """Initialize test properties: path to test file, path to
-        temporary result file, path to the client program, test status."""
-
+        temporary result file, path to the client program, test status."""  
+        rg = re.compile('.test.*')
         self.name = name
         self.args = args
         self.suite_ini = suite_ini
-        self.result = name.replace(".test", ".result")
-        self.skip_cond = name.replace(".test", ".skipcond")
+        self.result = rg.sub('.result', name)
+        self.skip_cond = rg.sub('.skipcond', name) 
         self.tmp_result = os.path.join(self.args.vardir,
                                        os.path.basename(self.result))
         self.reject = "{0}/test/{1}".format(self.args.builddir,
-                                            name.replace(".test", ".reject"))
+                                            rg.sub('.reject', name))
         self.is_executed = False
         self.is_executed_ok = None
         self.is_equal_result = None
@@ -230,6 +231,10 @@ class TestSuite:
             self.ini[i] = os.path.join(suite_path, self.ini[i]) if i in self.ini else None
         for i in ["disabled", "valgrind_disabled", "release_disabled"]:
             self.ini[i] = dict.fromkeys(self.ini[i].split()) if i in self.ini else dict()
+        for i in ["lua_libs"]:
+            self.ini[i] = map(lambda x: os.path.join(suite_path, x),
+                    dict.fromkeys(self.ini[i].split()) if i in self.ini else
+                    dict())
 
         try:
             self.server = Server(self.ini["core"])
@@ -257,6 +262,9 @@ class TestSuite:
                       self.args.vardir, self.args.mem, self.args.start_and_exit,
                       self.args.gdb, self.args.valgrind,
                       init_lua=self.ini["init_lua"], silent=False)
+        
+        for i in self.ini['lua_libs']:
+            shutil.copy(i, self.args.vardir) 
 
         if self.args.start_and_exit:
             print "  Start and exit requested, exiting..."

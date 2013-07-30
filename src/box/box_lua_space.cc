@@ -44,19 +44,19 @@ extern "C" {
  * @return A new table representing a space on top of the Lua
  * stack.
  */
-int
+static int
 lbox_pushspace(struct lua_State *L, struct space *space)
 {
 	lua_newtable(L);
 
 	/* space.arity */
 	lua_pushstring(L, "arity");
-	lua_pushnumber(L, space->arity);
+	lua_pushnumber(L, space->def.arity);
 	lua_settable(L, -3);
 
 	/* space.n */
 	lua_pushstring(L, "n");
-	lua_pushnumber(L, space->no);
+	lua_pushnumber(L, space_id(space));
 	lua_settable(L, -3);
 
 	/* all exists spaces are enabled */
@@ -76,45 +76,37 @@ lbox_pushspace(struct lua_State *L, struct space *space)
 	 * Fill space.index table with
 	 * all defined indexes.
 	 */
-	for (int i = 0; i < space->key_count; i++) {
-		lua_pushnumber(L, i);
+	for (int i = 0; i <= space->index_id_max; i++) {
+		Index *index = space_index(space, i);
+		if (index == NULL)
+			continue;
+		struct key_def *key_def = &index->key_def;
+		lua_pushnumber(L, key_def->id);
 		lua_newtable(L);		/* space.index[i] */
 
 		lua_pushstring(L, "unique");
-		lua_pushboolean(L, space->key_defs[i].is_unique);
+		lua_pushboolean(L, key_def->is_unique);
 		lua_settable(L, -3);
 
 		lua_pushstring(L, "type");
 
-		lua_pushstring(L, index_type_strs[space->key_defs[i].type]);
+		lua_pushstring(L, index_type_strs[key_def->type]);
 		lua_settable(L, -3);
 
 		lua_pushstring(L, "key_field");
 		lua_newtable(L);
 
-		for (uint32_t j = 0; j < space->key_defs[i].part_count; j++) {
+		for (uint32_t j = 0; j < key_def->part_count; j++) {
 			lua_pushnumber(L, j);
 			lua_newtable(L);
 
 			lua_pushstring(L, "type");
-			switch (space->key_defs[i].parts[j].type) {
-			case NUM:
-				lua_pushstring(L, "NUM");
-				break;
-			case NUM64:
-				lua_pushstring(L, "NUM64");
-				break;
-			case STRING:
-				lua_pushstring(L, "STR");
-				break;
-			default:
-				lua_pushstring(L, "UNKNOWN");
-				break;
-			}
+			lua_pushstring(L,
+			       field_type_strs[key_def->parts[j].type]);
 			lua_settable(L, -3);
 
 			lua_pushstring(L, "fieldno");
-			lua_pushnumber(L, space->key_defs[i].parts[j].fieldno);
+			lua_pushnumber(L, key_def->parts[j].fieldno);
 			lua_settable(L, -3);
 
 			lua_settable(L, -3);
@@ -138,35 +130,37 @@ lbox_pushspace(struct lua_State *L, struct space *space)
 	return 1;
 }
 
-/**
- * A callback adapter for space_foreach().
- */
-static void
-lbox_add_space(struct space *space, struct lua_State *L)
-{
-	lua_pushnumber(L, space->no);
-	lbox_pushspace(L, space);
-	lua_settable(L, -3);
-}
-
-static void
-lbox_add_space_wrapper(struct space *space, void *param)
-{
-	lbox_add_space(space, (struct lua_State *) param);
-}
-
-/**
- * Make all spaces available in Lua via box.space
- * array.
- */
+/** Export a space to Lua */
 void
-box_lua_load_cfg(struct lua_State *L)
+box_lua_space_new(struct lua_State *L, struct space *space)
 {
 	lua_getfield(L, LUA_GLOBALSINDEX, "box");
-	lua_pushstring(L, "space");
-	lua_newtable(L);
-	space_foreach(lbox_add_space_wrapper, L);	/* fill box.space */
-	lua_settable(L, -3);
-	lua_pop(L, 1);
+	lua_getfield(L, -1, "space");
+
+	if (!lua_istable(L, -1)) {
+		lua_pop(L, 1); /* pop nil */
+		lua_newtable(L);
+		lua_setfield(L, -2, "space");
+		lua_getfield(L, -1, "space");
+	}
+
+	lbox_pushspace(L, space);
+	lua_rawseti(L, -2, space_id(space));
+
+	lua_pop(L, 2); /* box, space */
+	assert(lua_gettop(L) == 0);
+}
+
+/** Delete a given space in Lua */
+void
+box_lua_space_delete(struct lua_State *L, struct space *space)
+{
+	lua_getfield(L, LUA_GLOBALSINDEX, "box");
+	lua_getfield(L, -1, "space");
+
+	lua_pushnil(L);
+	lua_rawseti(L, -2, space_id(space));
+	lua_pop(L, 2); /* box, space */
+
 	assert(lua_gettop(L) == 0);
 }

@@ -37,37 +37,42 @@
 struct tarantool_cfg;
 
 struct space {
-	Index *index[BOX_INDEX_MAX];
-	/** If not set (is 0), any tuple in the
-	 * space can have any number of fields.
-	 * If set, each tuple
-	 * must have exactly this many fields.
-	 */
-	uint32_t arity;
-
 	/**
-	 * The number of indexes in the space.
+	 * The number of *enabled* indexes in the space.
 	 *
-	 * It is equal to the number of non-nil members of the index
-	 * array and defines the key_defs array size as well.
+	 * After all indexes are built, it is equal to the number
+	 * of non-nil members of the index[] array.
 	 */
-	uint32_t key_count;
-
+	uint32_t index_count;
 	/**
-	 * The descriptors for all indexes that belong to the space.
+	 * There may be gaps index ids, i.e. index 0 and 2 may exist,
+	 * while index 1 is not defined. This member stores the
+	 * max id of a defined index in the space. It defines the
+	 * size of index_map array.
 	 */
-	struct key_def *key_defs;
-
-	/** Space number. */
-	uint32_t no;
+	uint32_t index_id_max;
+	/** Space meta. */
+	struct space_def def;
 
 	/** Default tuple format used by this space */
 	struct tuple_format *format;
+	/**
+	 * Sparse array of indexes defined on the space, indexed
+	 * by id. Used to quickly find index by id (for SELECTs).
+	 */
+	Index **index_map;
+	/**
+	 * Dense array of indexes defined on the space, in order
+	 * of index id. Initially stores only the primary key at
+	 * position 0, and is fully built by
+	 * space_build_secondary_keys().
+	 */
+	Index *index[];
 };
 
-
 /** Get space ordinal number. */
-static inline uint32_t space_n(struct space *sp) { return sp->no; }
+static inline uint32_t
+space_id(struct space *space) { return space->def.id; }
 
 /**
  * @brief A single method to handle REPLACE, DELETE and UPDATE.
@@ -166,14 +171,14 @@ void
 space_validate_tuple(struct space *sp, struct tuple *new_tuple);
 
 /**
- * Get index by index number.
+ * Get index by index id.
  * @return NULL if index not found.
  */
 static inline Index *
-space_index(struct space *sp, uint32_t index_no)
+space_index(struct space *space, uint32_t id)
 {
-	if (index_no < BOX_INDEX_MAX)
-		return sp->index[index_no];
+	if (id <= space->index_id_max)
+		return space->index_map[id];
 	return NULL;
 }
 
@@ -188,44 +193,29 @@ space_foreach(void (*func)(struct space *sp, void *udata), void *udata);
  *
  * @return NULL if space not found, otherwise space object.
  */
-struct space *space_by_n(uint32_t space_no);
+struct space *space_by_id(uint32_t id);
 
 static inline struct space *
-space_find(uint32_t space_no)
+space_find(uint32_t id)
 {
-	struct space *s = space_by_n(space_no);
-	if (s)
-		return s;
+	struct space *space = space_by_id(id);
+	if (space)
+		return space;
 
-	tnt_raise(ClientError, ER_NO_SUCH_SPACE, space_no);
-}
-
-/** Get key_def ordinal number. */
-static inline uint32_t
-key_def_n(struct space *sp, struct key_def *kp)
-{
-	assert(kp >= sp->key_defs && kp < (sp->key_defs + sp->key_count));
-	return kp - sp->key_defs;
+	tnt_raise(ClientError, ER_NO_SUCH_SPACE, id);
 }
 
 struct space *
-space_new(uint32_t space_no, struct key_def *key_defs,
-	  uint32_t key_count, uint32_t arity);
+space_new(struct space_def *space_def,
+	  struct key_def *key_defs, uint32_t key_count);
 
-
-/** Get index ordinal number in space. */
-static inline uint32_t
-index_n(Index *index)
-{
-	return key_def_n(index->space, index->key_def);
-}
-
-/** Check whether or not an index is primary in space.  */
-static inline bool
-index_is_primary(Index *index)
-{
-	return index_n(index) == 0;
-}
+/**
+ * Secondary indexes are built in bulk after all data is
+ * recovered. This flag indicates that the indexes are
+ * already built and ready for use.
+ */
+void
+space_build_secondary_keys(struct space *space);
 
 void space_init(void);
 void space_free(void);
@@ -237,13 +227,13 @@ void end_build_primary_indexes(void);
 void build_secondary_indexes(void);
 
 static inline Index *
-index_find(struct space *sp, uint32_t index_no)
+index_find(struct space *space, uint32_t index_id)
 {
-	Index *idx = space_index(sp, index_no);
-	if (idx == NULL)
-		tnt_raise(LoggedError, ER_NO_SUCH_INDEX, index_no,
-			  space_n(sp));
-	return idx;
+	Index *index = space_index(space, index_id);
+	if (index == NULL)
+		tnt_raise(LoggedError, ER_NO_SUCH_INDEX, index_id,
+			  space_id(space));
+	return index;
 }
 
 #endif /* TARANTOOL_BOX_SPACE_H_INCLUDED */

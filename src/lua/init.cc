@@ -950,7 +950,17 @@ tarantool_lua_printstack_yaml(struct lua_State *L, struct tbuf *out)
 			GCcdata *cd = cdataV(L->base + i - 1);
 			const char *sz = tarantool_lua_tostring(L, i);
 			int len = strlen(sz);
-			int chop = (cd->ctypeid == CTID_UINT64 ? 3 : 2);
+			int chop;
+			switch (cd->ctypeid){
+			case CTID_UINT64:
+				chop = 3;
+				break;
+			case CTID_INT64:
+				chop = 2;
+				break;
+			default:
+				chop = 0;
+			}
 			tbuf_printf(out, " - %-.*s" CRLF, len - chop, sz);
 		} else
 			tbuf_printf(out, " - %s" CRLF,
@@ -1472,8 +1482,6 @@ tarantool_lua_load_cfg(struct lua_State *L, struct tarantool_cfg *cfg)
 		panic("%s", lua_tostring(L, -1));
 	}
 	lua_pop(L, 1);	/* cleanup stack */
-
-	box_lua_load_cfg(L);
 	/*
 	 * Invoke a user-defined on_reload_configuration hook,
 	 * if it exists. Do it after everything else is done.

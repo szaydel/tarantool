@@ -27,66 +27,23 @@
  * SUCH DAMAGE.
  */
 #include "key_def.h"
-extern "C" {
-#include <cfg/tarantool_box_cfg.h>
-} /* extern "C" */
-#include "exception.h"
-#include <stddef.h>
+#include <stdlib.h>
 
 const char *field_type_strs[] = {"UNKNOWN", "NUM", "NUM64", "STR", "\0"};
 STRS(index_type, INDEX_TYPE);
 
 void
-key_def_create(struct key_def *def, struct tarantool_cfg_space_index *cfg_index)
+key_def_create(struct key_def *def, uint32_t id,
+	       enum index_type type, bool is_unique, uint32_t part_count)
 {
-	def->max_fieldno = 0;
-	def->part_count = 0;
+	def->type = type;
+	def->id = id;
+	def->is_unique = is_unique;
+	def->part_count = part_count;
 
-	def->type = STR2ENUM(index_type, cfg_index->type);
-	if (def->type == index_type_MAX)
-		tnt_raise(LoggedError, ER_INDEX_TYPE, cfg_index->type);
-
-	/* Calculate key part count and maximal field number. */
-	for (uint32_t k = 0; cfg_index->key_field[k] != NULL; ++k) {
-		auto cfg_key = cfg_index->key_field[k];
-
-		if (cfg_key->fieldno == -1) {
-			/* last filled key reached */
-			break;
-		}
-
-		def->max_fieldno = MAX(def->max_fieldno, cfg_key->fieldno);
-		def->part_count++;
-	}
-
-	/* init def array */
-	def->parts = (struct key_part *) malloc(sizeof(struct key_part) *
-						def->part_count);
-
-	uint32_t cmp_order_size = (def->max_fieldno + 1) * sizeof(uint32_t);
-	/* init compare order array */
-	def->cmp_order = (uint32_t *) malloc(cmp_order_size);
-
-	for (uint32_t fieldno = 0; fieldno <= def->max_fieldno; fieldno++)
-		def->cmp_order[fieldno] = UINT32_MAX;
-
-	/* fill fields and compare order */
-	for (uint32_t k = 0; cfg_index->key_field[k] != NULL; ++k) {
-		auto cfg_key = cfg_index->key_field[k];
-
-		if (cfg_key->fieldno == -1) {
-			/* last filled key reached */
-			break;
-		}
-
-		/* fill keys */
-		def->parts[k].fieldno = cfg_key->fieldno;
-		def->parts[k].type = STR2ENUM(field_type, cfg_key->type);
-		/* fill compare order */
-		if (def->cmp_order[cfg_key->fieldno] == UINT32_MAX)
-			def->cmp_order[cfg_key->fieldno] = k;
-	}
-	def->is_unique = cfg_index->unique;
+	uint32_t parts_size = sizeof(struct key_part) * def->part_count;
+	def->parts = (struct key_part *) malloc(parts_size);
+	memset(def->parts, 0, parts_size);
 }
 
 /** Free a key definition. */
@@ -94,6 +51,5 @@ void
 key_def_destroy(struct key_def *key_def)
 {
 	free(key_def->parts);
-	free(key_def->cmp_order);
 }
 

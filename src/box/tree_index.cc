@@ -71,7 +71,7 @@ sptree_index_node_compare(const void *node_a, const void *node_b, void *arg)
 	struct tuple *tuple_a = sptree_index_unfold(node_a);
 	struct tuple *tuple_b = sptree_index_unfold(node_b);
 
-	return tuple_compare(tuple_a, tuple_b, self->key_def);
+	return tuple_compare(tuple_a, tuple_b, &self->key_def);
 }
 
 static int
@@ -81,7 +81,7 @@ sptree_index_node_compare_dup(const void *node_a, const void *node_b, void *arg)
 	struct tuple *tuple_a = sptree_index_unfold(node_a);
 	struct tuple *tuple_b = sptree_index_unfold(node_b);
 
-	return tuple_compare_dup(tuple_a, tuple_b, self->key_def);
+	return tuple_compare_dup(tuple_a, tuple_b, &self->key_def);
 }
 
 static int
@@ -94,7 +94,7 @@ sptree_index_node_compare_with_key(const void *key, const void *node, void *arg)
 
 	/* the result is inverted because arguments are swapped */
 	return -tuple_compare_with_key(tuple, key_data->key,
-				       key_data->part_count, self->key_def);
+				       key_data->part_count, &self->key_def);
 }
 
 /* {{{ TreeIndex Iterators ****************************************/
@@ -207,8 +207,8 @@ tree_iterator_gt(struct iterator *iterator)
 
 /* {{{ TreeIndex  **********************************************************/
 
-TreeIndex::TreeIndex(struct key_def *key_def, struct space *space)
-	: Index(key_def, space)
+TreeIndex::TreeIndex(struct key_def *key_def)
+	: Index(key_def)
 {
 	memset(&tree, 0, sizeof tree);
 }
@@ -248,7 +248,7 @@ TreeIndex::random(uint32_t rnd) const
 struct tuple *
 TreeIndex::findByKey(const char *key, uint32_t part_count) const
 {
-	assert(key_def->is_unique && part_count == key_def->part_count);
+	assert(key_def.is_unique && part_count == key_def.part_count);
 
 	struct sptree_index_key_data key_data;
 	key_data.key = key;
@@ -279,7 +279,7 @@ TreeIndex::replace(struct tuple *old_tuple, struct tuple *new_tuple,
 			sptree_index_delete(&tree, &new_node);
 			if (p_dup_node != NULL)
 				sptree_index_replace(&tree, p_dup_node, NULL);
-			tnt_raise(ClientError, errcode, index_n(this));
+			tnt_raise(ClientError, errcode, index_id(this));
 		}
 		if (dup_tuple)
 			return dup_tuple;
@@ -361,30 +361,29 @@ TreeIndex::initIterator(struct iterator *iterator, enum iterator_type type,
 void
 TreeIndex::beginBuild()
 {
-	assert(index_is_primary(this));
-
 	tree.size = 0;
-	tree.max_size = 64;
+	tree.max_size = 0;
+	tree.members = NULL;
+}
 
-	size_t sz = tree.max_size * sizeof(struct sptree_index_node);
-	tree.members = malloc(sz);
+void
+TreeIndex::reserve(uint32_t size_hint)
+{
+	assert(size_hint >= tree.size);
+	size_t sz = size_hint * sizeof(struct sptree_index_node);
+	tree.members = realloc(tree.members, sz);
 	if (tree.members == NULL) {
-		panic("malloc(): failed to allocate %" PRI_SZ " bytes", sz);
+		tnt_raise(ClientError, ER_MEMORY_ISSUE, sz,
+			  "TreeIndex::reserve()", "malloc");
 	}
+	tree.max_size = size_hint;
 }
 
 void
 TreeIndex::buildNext(struct tuple *tuple)
 {
-	if (tree.size == tree.max_size) {
-		tree.max_size *= 2;
-
-		size_t sz = tree.max_size * sizeof(struct sptree_index_node);
-		tree.members = realloc(tree.members, sz);
-		if (tree.members == NULL) {
-			panic("malloc(): failed to allocate %" PRI_SZ " bytes", sz);
-		}
-	}
+	if (tree.size == tree.max_size)
+		reserve(tree.max_size * 2);
 
 	struct sptree_index_node *node = (struct sptree_index_node *)
 			tree.members + tree.size;
@@ -395,60 +394,21 @@ TreeIndex::buildNext(struct tuple *tuple)
 void
 TreeIndex::endBuild()
 {
-	assert(index_is_primary(this));
-
 	uint32_t n_tuples = tree.size;
+
+	if (n_tuples) {
+		say_info("Sorting %" PRIu32 " keys in index %" PRIu32 "...",
+			 n_tuples, index_id(this));
+	}
 	uint32_t estimated_tuples = tree.max_size;
 	void *nodes = tree.members;
-
-	sptree_index_init(&tree, sizeof(struct tuple *),
-			  nodes, n_tuples, estimated_tuples,
-			  sptree_index_node_compare_with_key,
-			  sptree_index_node_compare,
-			  this);
-}
-
-void
-TreeIndex::build(Index *pk)
-{
-	uint32_t n_tuples = pk->size();
-	uint32_t estimated_tuples = n_tuples * 1.2;
-
-	void *nodes = NULL;
-	if (n_tuples) {
-		/*
-		 * Allocate a little extra to avoid
-		 * unnecessary realloc() when more data is
-		 * inserted.
-		*/
-		size_t sz = estimated_tuples * sizeof(struct sptree_index_node);
-		nodes = malloc(sz);
-		if (nodes == NULL) {
-			panic("malloc(): failed to allocate %" PRI_SZ " bytes", sz);
-		}
-	}
-
-	struct iterator *it = pk->position();
-	pk->initIterator(it, ITER_ALL, NULL, 0);
-
-	struct tuple *tuple;
-
-	for (uint32_t i = 0; (tuple = it->next(it)) != NULL; ++i) {
-		struct sptree_index_node *node = (struct sptree_index_node *)
-				nodes + i;
-		sptree_index_fold(node, tuple);
-	}
-
-	if (n_tuples) {
-		say_info("Sorting %" PRIu32 " keys in index %" PRIu32 "...", n_tuples,
-			 index_n(this));
-	}
 
 	/* If n_tuples == 0 then estimated_tuples = 0, elem == NULL, tree is empty */
 	sptree_index_init(&tree, sizeof(struct sptree_index_node),
 			  nodes, n_tuples, estimated_tuples,
 			  sptree_index_node_compare_with_key,
-			  key_def->is_unique ? sptree_index_node_compare
-					     : sptree_index_node_compare_dup,
+			  key_def.is_unique ? sptree_index_node_compare
+					    : sptree_index_node_compare_dup,
 			  this);
 }
+

@@ -37,7 +37,6 @@
 enum field_type { UNKNOWN = 0, NUM, NUM64, STRING, field_type_MAX };
 extern const char *field_type_strs[];
 
-
 static inline uint32_t
 field_type_maxlen(enum field_type type)
 {
@@ -62,36 +61,51 @@ struct key_part {
 
 /* Descriptor of a multipart key. */
 struct key_def {
-	/* Description of parts of a multipart index. */
-	struct key_part *parts;
-	/*
-	 * An array holding field positions in 'parts' array.
-	 * Imagine there is index[1] = { key_field[0].fieldno=5,
-	 * key_field[1].fieldno=3 }.
-	 * 'parts' array for such index contains data from
-	 * key_field[0] and key_field[1] respectively.
-	 * max_fieldno is 5, and cmp_order array holds offsets of
-	 * field 3 and 5 in 'parts' array: -1, -1, -1, 0, -1, 1.
-	 */
-	uint32_t *cmp_order;
-	/* The size of the 'parts' array. */
+	/** Ordinal index number in the index array. */
+	uint32_t id;
+	/** The size of the 'parts' array. */
 	uint32_t part_count;
-	/*
-	 * Max fieldno in 'parts' array. Defines the size of
-	 * cmp_order array (which is max_fieldno + 1).
-	 */
-	uint32_t max_fieldno;
-	bool is_unique;
+	/** Description of parts of a multipart index. */
+	struct key_part *parts;
+	/** Index type. */
 	enum index_type type;
+	/** Is this key unique. */
+	bool is_unique;
 };
 
-struct tarantool_cfg_space_index;
-
+/** Initialize a pre-allocated key_def. */
 void
-key_def_create(struct key_def *def,
-	       struct tarantool_cfg_space_index *cfg_index);
+key_def_create(struct key_def *def, uint32_t id,
+	       enum index_type type, bool is_unique,
+	       uint32_t part_count);
+
+/**
+ * Set a single key part in a key def.
+ * @pre part_no < part_count
+ */
+static inline void
+key_def_set_part(struct key_def *def, uint32_t part_no,
+		 uint32_t fieldno, enum field_type type)
+{
+	assert(part_no < def->part_count);
+	def->parts[part_no].fieldno = fieldno;
+	def->parts[part_no].type = type;
+}
 
 void
 key_def_destroy(struct key_def *def);
+
+/** Space metadata. */
+struct space_def {
+	/** Space id. */
+	uint32_t id;
+	/**
+	 * If not set (is 0), any tuple in the
+	 * space can have any number of fields.
+	 * If set, each tuple
+	 * must have exactly this many fields.
+	 */
+	uint32_t arity;
+};
 
 #endif /* TARANTOOL_BOX_KEY_DEF_H_INCLUDED */

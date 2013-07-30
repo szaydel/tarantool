@@ -649,7 +649,7 @@ lbox_pushiterator(struct lua_State *L, Index *index,
 		memcpy(udata->key, key, size);
 		key = udata->key;
 	}
-	key_validate(index->key_def, type, key, part_count);
+	key_validate(&index->key_def, type, key, part_count);
 	index->initIterator(it, type, key, part_count);
 }
 
@@ -692,8 +692,7 @@ static int
 lbox_index_tostring(struct lua_State *L)
 {
 	Index *index = lua_checkindex(L, 1);
-	lua_pushfstring(L, "index %d in space %d",
-			index_n(index), space_n(index->space));
+	lua_pushfstring(L, "index %d", (int) index_id(index));
 	return 1;
 }
 
@@ -709,7 +708,7 @@ static int
 lbox_index_part_count(struct lua_State *L)
 {
 	Index *index = lua_checkindex(L, 1);
-	lua_pushinteger(L, index->key_def->part_count);
+	lua_pushinteger(L, index->key_def.part_count);
 	return 1;
 }
 
@@ -814,10 +813,10 @@ lbox_create_iterator(struct lua_State *L)
 		 * indexes. HASH indexes can only use single-part
 		 * keys.
 		*/
-		if (key_part_count > index->key_def->part_count)
+		if (key_part_count > index->key_def.part_count)
 			luaL_error(L, "Key part count %d"
 				   " is greater than index part count %d",
-				   key_part_count, index->key_def->part_count);
+				   key_part_count, index->key_def.part_count);
 		luaL_pushresult(&b);
 		key = lua_tolstring(L, -1, &key_size);
 		if (key_size == 0)
@@ -927,7 +926,7 @@ lbox_index_count(struct lua_State *L)
 	const char *key = lua_tostring(L, -1);
 	uint32_t count = 0;
 
-	key_validate(index->key_def, ITER_EQ, key, key_part_count);
+	key_validate(&index->key_def, ITER_EQ, key, key_part_count);
 	/* Prepare index iterator */
 	struct iterator *it = index->position();
 	index->initIterator(it, ITER_EQ, key, key_part_count);
@@ -1272,15 +1271,12 @@ lbox_call_loadproc(struct lua_State *L)
  * (implementation of 'CALL' command code).
  */
 void
-box_lua_execute(struct request *request, struct txn *txn, struct port *port)
+box_lua_execute(const struct request *request, struct txn *txn,
+		struct port *port)
 {
 	(void) txn;
-	const char **reqpos = &request->data;
-	const char *reqend = request->data + request->len;
 	lua_State *L = lua_newthread(root_L);
 	int coro_ref = luaL_ref(root_L, LUA_REGISTRYINDEX);
-	/* Request flags: not used. */
-	(void) (pick_u32(reqpos, reqend));
 
 	try {
 		auto scoped_guard = make_scoped_guard([=] {
@@ -1291,18 +1287,20 @@ box_lua_execute(struct request *request, struct txn *txn, struct port *port)
 			luaL_unref(root_L, LUA_REGISTRYINDEX, coro_ref);
 		});
 
-		uint32_t field_len;
 		/* proc name */
-		const char *field = pick_field_str(reqpos, reqend, &field_len);
-		box_lua_find(L, field, field + field_len);
+		box_lua_find(L, request->c.procname, request->c.procname +
+			     request->c.procname_len);
 		/* Push the rest of args (a tuple). */
-		uint32_t nargs = pick_u32(reqpos, reqend);
-		luaL_checkstack(L, nargs, "call: out of stack");
-		for (int i = 0; i < nargs; i++) {
-			field = pick_field_str(reqpos, reqend, &field_len);
+		const char *args = request->c.args;
+		luaL_checkstack(L, request->c.arg_count, "call: out of stack");
+
+		for (uint32_t i = 0; i < request->c.arg_count; i++) {
+			uint32_t field_len = load_varint32(&args);
+			const char *field = args;
+			args += field_len;
 			lua_pushlstring(L, field, field_len);
 		}
-		lua_call(L, nargs, LUA_MULTRET);
+		lua_call(L, request->c.arg_count, LUA_MULTRET);
 		/* Send results of the called procedure to the client. */
 		port_add_lua_multret(port, L);
 	} catch (const Exception& e) {
