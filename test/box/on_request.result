@@ -60,29 +60,29 @@ id = box.on_request(function(req, skip) return req.type end)
 ...
 box.select(23, 12, 1)
 ---
- - 'select': {}
+ - 'SELECT': {}
 ...
 box.delete(24, 12, 1)
 ---
- - 'delete': {}
+ - 'DELETE': {}
 ...
 box.update(25, 12, '=p', 1, 2)
 ---
- - 'update': {}
+ - 'UPDATE': {}
 ...
 box.insert(26, 2, 2, 3)
 ---
- - 'replace': {}
+ - 'REPLACE': {}
 ...
 box.replace(27, 2, 2, 3)
 ---
- - 'replace': {}
+ - 'REPLACE': {}
 ...
 box.remove_on_request(id)
 ---
  - true
 ...
-id = box.on_request(function(req, skip) return req.space end)
+id = box.on_request(function(req, skip) return req.space_id end)
 ---
 ...
 box.select(23, 12, 1)
@@ -114,7 +114,7 @@ id = box.on_request(function(req, skip) return req.flags end)
 ...
 box.select(23, 12, 1)
 ---
- - 'nil': {}
+ - 0: {}
 ...
 box.delete(24, 12, 1)
 ---
@@ -141,7 +141,7 @@ id = box.on_request(function(req, skip) return req.key end)
 ...
 box.select(23, 12, 1)
 ---
- - 'nil': {}
+ - 1: {}
 ...
 box.delete(24, 12, 1)
 ---
@@ -153,7 +153,14 @@ box.update(25, 12, '=p', 1, 2)
 ...
 box.insert(26, 2, 2, 3)
 ---
- - 2: {2, 3}
+ - 'nil': {}
+...
+box.remove_on_request(id)
+---
+ - true
+...
+id = box.on_request(function(req, skip) return req.tuple end)
+---
 ...
 box.replace(27, 2, 2, 3)
 ---
@@ -174,7 +181,7 @@ box.remove_on_request(id)
 ---
  - true
 ...
-id = box.on_request(function(req, skip) return req.index end)
+id = box.on_request(function(req, skip) return req.index_id end)
 ---
 ...
 box.select(23, 12, 1)
@@ -207,21 +214,21 @@ box.remove_on_request(id)
 ---
  - true
 ...
-id = box.on_request(function(req, skip) return req.format end)
+id = box.on_request(function(req, skip) return req.expr end)
 ---
 ...
 box.update(23, 12, '=p!p#p', 11, 2, 12, 3, 34, 4)
 ---
- - '=p!p#p': {}
+ - '\x03\x00\x00\x00\x0B\x00\x00\x00\x00\x04\x02\x00\x00\x00\x0C\x00\x00\x00\x07\x04\x03\x00\x00\x00"\x00\x00\x00\x06\x04\x04\x00\x00\x00': {}
 ...
 box.remove_on_request(id)
 ---
  - true
 ...
-id = box.on_request(function(req, skip) return req.opargs end)
+id = box.on_request(function(req, skip) return req.expr end)
 ---
 ...
 box.update(23, 12, '=p!p#p&p:p', 11, 2, 12, 3, 34, 4, 22, 21, 27, box.pack('ppp', 223, 3332, 'abc'))
 ---
- - 11: {2, 12, 3, 34, '', 22, 21, 27, '\x0E\x04\xDF\x00\x00\x00\x04\x04\x0D\x00\x00\x03abc'}
+ - '\x05\x00\x00\x00\x0B\x00\x00\x00\x00\x04\x02\x00\x00\x00\x0C\x00\x00\x00\x07\x04\x03\x00\x00\x00"\x00\x00\x00\x06\x04\x04\x00\x00\x00\x16\x00\x00\x00\x02\x04\x15\x00\x00\x00\x1B\x00\x00\x00\x05\x0E\x04\xDF\x00\x00\x00\x04\x04\x0D\x00\x00\x03abc': {}
 ...
