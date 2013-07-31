@@ -989,6 +989,9 @@ static void
 port_lua_add_tuple(struct port *port, struct tuple *tuple,
 		   uint32_t flags __attribute__((unused)))
 {
+	if (!(flags & BOX_RETURN_TUPLE))
+		return;
+
 	lua_State *L = port_lua(port)->L;
 	try {
 		lbox_pushtuple(L, tuple);
@@ -1734,12 +1737,28 @@ lbox_unpack(struct lua_State *L)
 }
 
 
+static struct request *
+lbox_checkrequest(struct lua_State *L, int narg);
+
 static int
-lbox_on_request_skip(struct lua_State *L)
+lbox_on_request_next(struct lua_State *L)
 {
-	int *skip = (int *) lua_touserdata(L, lua_upvalueindex(1));
-	*skip = 1;
-	return 0;
+	struct request *request = lbox_checkrequest(L, 1);
+	struct request_trigger *trigger = (struct request_trigger *)
+			lua_touserdata(L, lua_upvalueindex(1));
+	struct txn *txn = (struct txn *)
+			lua_touserdata(L, lua_upvalueindex(2));
+
+	int top = lua_gettop(L);
+
+	struct port *port_lua = port_lua_create(L);
+	request_trigger_next(trigger, request, txn, port_lua);
+	struct tuple *tuple;
+	if ((tuple = txn->new_tuple) || (tuple = txn->old_tuple))
+		port_add_tuple(port_lua, tuple, request->flags);
+	request->flags &= ~BOX_RETURN_TUPLE;
+
+	return lua_gettop(L) - top;
 }
 
 static int
@@ -1832,9 +1851,8 @@ lbox_request_index(struct lua_State *L)
 }
 
 static int
-lbox_push_request(struct lua_State *L, struct request *request)
+lbox_pushrequest(struct lua_State *L, struct request *request)
 {
-	say_warn("__index");
 	lua_newtable(L);
 	lua_pushstring(L, "raw");
 	lua_pushlightuserdata(L, request);
@@ -1913,9 +1931,27 @@ lbox_push_request(struct lua_State *L, struct request *request)
 	return 1;
 }
 
+static struct request *
+lbox_checkrequest(struct lua_State *L, int narg)
+{
+	if (!lua_istable(L, narg)) {
+		luaL_error(L, "request expected as %d argument 1", narg);
+		return NULL;
+	}
+
+	lua_pushstring(L, "raw");
+	lua_rawget (L, narg);
+	struct request *request = (struct request *) lua_touserdata(L, -1);
+	if (request == NULL) {
+		luaL_error(L, "request expected as %d argument 2", narg);
+		return NULL;
+	}
+	return request;
+}
+
 static int
-lbox_on_request_trigger(struct request *request,
-	struct txn *txn, struct port *port, void *data)
+lbox_on_request_trigger(struct request_trigger *trigger,
+	struct request *request, struct txn *txn, struct port *port, void *data)
 {
 	(void)txn;
 
@@ -1932,25 +1968,16 @@ lbox_on_request_trigger(struct request *request,
 	});
 
 	try {
-		int skip = 0;
-
 		/* request is the first argument */
-		lbox_push_request(L, request);
+		lbox_pushrequest(L, request);
 
-		/* skip() is the second argument */
-		lua_pushlightuserdata(L, &skip);
-		lua_pushcclosure(L, lbox_on_request_skip, 1);
-
+		/* next() is the second argument */
+		lua_pushlightuserdata(L, trigger);
+		lua_pushlightuserdata(L, txn);
+		lua_pushcclosure(L, lbox_on_request_next, 2);
 		lua_call(L, 2, LUA_MULTRET);
-
-		if (skip) {
-			lua_settop(L, 0);
-			return 1;
-		} else {
-			port_add_lua_multret(port, L);
-			return 0;
-		}
-
+		port_add_lua_multret(port, L);
+		return 0;
 	} catch(const Exception& e) {
 		throw;
 	} catch(...) {

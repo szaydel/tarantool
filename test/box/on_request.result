@@ -33,18 +33,18 @@ box.select(0, 0, 1)
 ---
  - 1: {'te-test'}
 ...
-id = box.on_request(function(req, skip) skip() end)
+id = box.on_request(function(req, next) next() end)
 ---
 ...
 box.select(0, 0, 1)
 ---
- - 1: {'te-test'}
+error: 'Lua error: [string "id = box.on_request(function(req, next) next(..."]:1: request expected as 1 argument 1'
 ...
 box.remove_on_request(id)
 ---
  - true
 ...
-id = box.on_request(function(req, skip) return { 1, 're-test' } end)
+id = box.on_request(function(req, next) return { 1, 're-test' } end)
 ---
 ...
 box.select(0, 0, 1)
@@ -55,7 +55,7 @@ box.remove_on_request(id)
 ---
  - true
 ...
-id = box.on_request(function(req, skip) return req.type end)
+id = box.on_request(function(req, next) return req.type end)
 ---
 ...
 box.select(23, 12, 1)
@@ -82,7 +82,7 @@ box.remove_on_request(id)
 ---
  - true
 ...
-id = box.on_request(function(req, skip) return req.space_id end)
+id = box.on_request(function(req, next) return req.space_id end)
 ---
 ...
 box.select(23, 12, 1)
@@ -109,7 +109,7 @@ box.remove_on_request(id)
 ---
  - true
 ...
-id = box.on_request(function(req, skip) return req.flags end)
+id = box.on_request(function(req, next) return req.flags end)
 ---
 ...
 box.select(23, 12, 1)
@@ -136,7 +136,7 @@ box.remove_on_request(id)
 ---
  - true
 ...
-id = box.on_request(function(req, skip) return req.key end)
+id = box.on_request(function(req, next) return req.key end)
 ---
 ...
 box.select(23, 12, 1)
@@ -159,7 +159,7 @@ box.remove_on_request(id)
 ---
  - true
 ...
-id = box.on_request(function(req, skip) return req.tuple end)
+id = box.on_request(function(req, next) return req.tuple end)
 ---
 ...
 box.replace(27, 2, 2, 3)
@@ -170,7 +170,7 @@ box.remove_on_request(id)
 ---
  - true
 ...
-id = box.on_request(function(req, skip) return unpack(req.keys) end)
+id = box.on_request(function(req, next) return unpack(req.keys) end)
 ---
 ...
 box.select(23, 12, 1)
@@ -181,7 +181,7 @@ box.remove_on_request(id)
 ---
  - true
 ...
-id = box.on_request(function(req, skip) return req.index_id end)
+id = box.on_request(function(req, next) return req.index_id end)
 ---
 ...
 box.select(23, 12, 1)
@@ -192,7 +192,7 @@ box.remove_on_request(id)
 ---
  - true
 ...
-id = box.on_request(function(req, skip) return req.offset end)
+id = box.on_request(function(req, next) return req.offset end)
 ---
 ...
 box.select(23, 12, 1)
@@ -203,7 +203,7 @@ box.remove_on_request(id)
 ---
  - true
 ...
-id = box.on_request(function(req, skip) return req.limit end)
+id = box.on_request(function(req, next) return req.limit end)
 ---
 ...
 box.select(23, 12, 1)
@@ -214,7 +214,7 @@ box.remove_on_request(id)
 ---
  - true
 ...
-id = box.on_request(function(req, skip) return req.expr end)
+id = box.on_request(function(req, next) return req.expr end)
 ---
 ...
 box.update(23, 12, '=p!p#p', 11, 2, 12, 3, 34, 4)
@@ -225,10 +225,21 @@ box.remove_on_request(id)
 ---
  - true
 ...
-id = box.on_request(function(req, skip) return req.expr end)
+id = box.on_request(function(req, next) return req.expr end)
 ---
 ...
 box.update(23, 12, '=p!p#p&p:p', 11, 2, 12, 3, 34, 4, 22, 21, 27, box.pack('ppp', 223, 3332, 'abc'))
 ---
  - '\x05\x00\x00\x00\x0B\x00\x00\x00\x00\x04\x02\x00\x00\x00\x0C\x00\x00\x00\x07\x04\x03\x00\x00\x00"\x00\x00\x00\x06\x04\x04\x00\x00\x00\x16\x00\x00\x00\x02\x04\x15\x00\x00\x00\x1B\x00\x00\x00\x05\x0E\x04\xDF\x00\x00\x00\x04\x04\x0D\x00\x00\x03abc': {}
+...
+box.remove_on_request(id)
+---
+ - true
+...
+id = box.on_request(function(req, next) tuple = next(req); print(tuple); return tuple end)
+---
+...
+box.replace(0, 1, 2, 3, 4)
+---
+ - 1: {2, 3, 4}
 ...

@@ -172,7 +172,6 @@ execute_replace(const struct request *request, struct txn *txn,
 		space_validate_tuple(space, new_tuple);
 		enum dup_replace_mode mode = dup_replace_mode(request->flags);
 		txn_replace(txn, space, NULL, new_tuple, mode);
-
 	} catch (const Exception &e) {
 		tuple_free(new_tuple);
 		throw;
@@ -391,25 +390,37 @@ request_create(struct request *request, uint32_t type, const char *data,
 }
 
 static int
-local_request_execute(struct request *request, struct txn *txn,
-		      struct port *port, void *data)
+local_request_execute(struct request_trigger *trigger, struct request *request,
+		      struct txn *txn, struct port *port, void *data)
 {
+	(void) trigger;
 	(void) data;
 	request->execute(request, txn, port);
 	return 0;
 }
 
 void
+request_trigger_next(struct request_trigger *trigger,
+		     struct request *request, struct txn *txn,
+		     struct port *port)
+{
+	/* No more triggers */
+	if (rlist_last(&executers) == &trigger->list)
+		return;
+
+	struct request_trigger *next = rlist_next_entry(trigger, list);
+	next->handler(next, request, txn, port, next->data);
+}
+
+void
 request_execute(struct request *request, struct txn *txn, struct port *port)
 {
-	struct request_trigger *t;
-	int res = -1;
-	rlist_foreach_entry(t, &executers, list) {
-		res = t->handler(request, txn, port, t->data);
-		if (res == 0)
-			return;
-	}
-	assert(res == 0);
+	if (unlikely(rlist_empty(&executers)))
+		return;
+
+	struct request_trigger *first = rlist_first_entry(&executers,
+		struct request_trigger, list);
+	first->handler(first, request, txn, port, first->data);
 }
 
 /**

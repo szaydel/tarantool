@@ -141,7 +141,8 @@ request_create(struct request *request, uint32_t type, const char *data,
 /* request triggers */
 typedef
 int(*request_execute_handler)
-	(struct request *, struct txn *, struct port *, void *);
+(struct request_trigger *, struct request *, struct txn *, struct port *,
+	void *);
 
 enum {
 	RT_SYSTEM_LAST,
@@ -164,6 +165,11 @@ int add_request_trigger(int type, request_execute_handler handler, void *udata);
 */
 int remove_request_trigger(int trigger_id);
 
+
+void
+request_trigger_next(struct request_trigger *trigger,
+		     struct request *request, struct txn *txn,
+		     struct port *port);
 
 /**
 * request_init - init request system

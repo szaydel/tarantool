@@ -30,6 +30,8 @@
  */
 #include "tarantool/util.h"
 
+#include "request.h"
+
 struct tuple;
 struct port;
 
@@ -70,6 +72,8 @@ port_eof(struct port *port)
 {
 	return (port->vtab->eof)(port);
 }
+
+#include "say.h"
 
 static inline void
 port_add_tuple(struct port *port, struct tuple *tuple, uint32_t flags)
