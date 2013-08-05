@@ -254,7 +254,7 @@ execute_select(const struct request *request, struct txn *txn,
 				continue;
 			}
 
-			port_add_tuple(port, tuple, BOX_RETURN_TUPLE);
+			port_add_tuple(port, tuple, request->flags);
 
 			if (limit == ++found)
 				break;
@@ -335,6 +335,7 @@ request_create(struct request *request, uint32_t type, const char *data,
 		request->r.tuple_end = reqend;
 		break;
 	case SELECT:
+		request->flags |= BOX_RETURN_TUPLE;
 		request->execute = execute_select;
 		request->s.space_no = pick_u32(reqpos, reqend);
 		request->s.index_no = pick_u32(reqpos, reqend);
@@ -375,6 +376,7 @@ request_create(struct request *request, uint32_t type, const char *data,
 		request->execute = box_lua_execute;
 		request->flags |= (pick_u32(reqpos, reqend) &
 				   BOX_ALLOWED_REQUEST_FLAGS);
+		request->flags |= BOX_RETURN_TUPLE;
 		request->c.procname = pick_field_str(reqpos, reqend,
 						     &request->c.procname_len);
 		request->c.args = read_key(reqpos, reqend,

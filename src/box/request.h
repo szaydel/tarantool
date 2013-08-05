@@ -40,6 +40,7 @@ struct port;
 #define BOX_ALLOWED_REQUEST_FLAGS	(BOX_RETURN_TUPLE | \
 					 BOX_ADD | \
 					 BOX_REPLACE)
+#define BOX_IGNORE_TXN_TUPLES		0x08
 
 /**
     deprecated request ids:

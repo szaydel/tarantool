@@ -1093,14 +1093,15 @@ lua_totuple(struct lua_State *L, int index)
 }
 
 static void
-port_add_lua_ret(struct port *port, struct lua_State *L, int index)
+port_add_lua_ret(struct port *port, struct lua_State *L, int index,
+		 uint32_t flags)
 {
 	struct tuple *tuple = lua_totuple(L, index);
 	auto scoped_guard = make_scoped_guard([=] {
 		if (tuple->refs == 0)
 			tuple_free(tuple);
 	});
-	port_add_tuple(port, tuple, BOX_RETURN_TUPLE);
+	port_add_tuple(port, tuple, flags);
 }
 
 /**
@@ -1122,7 +1123,7 @@ port_add_lua_ret(struct port *port, struct lua_State *L, int index)
  * while Lua table size is pretty much unlimited.
  */
 static void
-port_add_lua_multret(struct port *port, struct lua_State *L)
+port_add_lua_multret(struct port *port, struct lua_State *L, uint32_t flags)
 {
 	int nargs = lua_gettop(L);
 	/** Check if we deal with a table of tables. */
@@ -1138,7 +1139,7 @@ port_add_lua_multret(struct port *port, struct lua_State *L)
 		    (lua_istable(L, -1) || lua_isuserdata(L, -1))) {
 
 			do {
-				port_add_lua_ret(port, L, lua_gettop(L));
+				port_add_lua_ret(port, L, lua_gettop(L), flags);
 				lua_pop(L, 1);
 			} while (lua_next(L, 1));
 			return;
@@ -1147,7 +1148,7 @@ port_add_lua_multret(struct port *port, struct lua_State *L)
 		}
 	}
 	for (int i = 1; i <= nargs; ++i) {
-		port_add_lua_ret(port, L, i);
+		port_add_lua_ret(port, L, i, flags);
 	}
 }
 
@@ -1305,7 +1306,7 @@ box_lua_execute(const struct request *request, struct txn *txn,
 		}
 		lua_call(L, request->c.arg_count, LUA_MULTRET);
 		/* Send results of the called procedure to the client. */
-		port_add_lua_multret(port, L);
+		port_add_lua_multret(port, L, request->flags);
 	} catch (const Exception& e) {
 		throw;
 	} catch (...) {
@@ -1754,9 +1755,10 @@ lbox_on_request_next(struct lua_State *L)
 	struct port *port_lua = port_lua_create(L);
 	request_trigger_next(trigger, request, txn, port_lua);
 	struct tuple *tuple;
-	if ((tuple = txn->new_tuple) || (tuple = txn->old_tuple))
-		port_add_tuple(port_lua, tuple, request->flags);
-	request->flags &= ~BOX_RETURN_TUPLE;
+	if ((tuple = txn->new_tuple) || (tuple = txn->old_tuple)) {
+		port_add_tuple(port_lua, tuple, request->flags |
+			       BOX_RETURN_TUPLE);
+	}
 
 	return lua_gettop(L) - top;
 }
@@ -1976,7 +1978,9 @@ lbox_on_request_trigger(struct request_trigger *trigger,
 		lua_pushlightuserdata(L, txn);
 		lua_pushcclosure(L, lbox_on_request_next, 2);
 		lua_call(L, 2, LUA_MULTRET);
-		port_add_lua_multret(port, L);
+
+		port_add_lua_multret(port, L, request->flags);
+		request->flags |= BOX_IGNORE_TXN_TUPLES;
 		return 0;
 	} catch(const Exception& e) {
 		throw;
