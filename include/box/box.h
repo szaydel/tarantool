@@ -105,7 +105,7 @@ enum {
 
 /* request triggers */
 typedef
-int(*request_execute_handler)
+void (*request_execute_handler)
 (struct request_trigger *, struct request *, struct txn *, struct port *,
 	void *);
 

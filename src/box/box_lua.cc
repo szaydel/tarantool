@@ -1951,7 +1951,7 @@ lbox_checkrequest(struct lua_State *L, int narg)
 	return request;
 }
 
-static int
+static void
 lbox_on_request_trigger(struct request_trigger *trigger,
 	struct request *request, struct txn *txn, struct port *port, void *data)
 {
@@ -1981,14 +1981,11 @@ lbox_on_request_trigger(struct request_trigger *trigger,
 
 		port_add_lua_multret(port, L, request->flags);
 		request->flags |= BOX_IGNORE_TXN_TUPLES;
-		return 0;
 	} catch(const Exception& e) {
 		throw;
 	} catch(...) {
 		tnt_raise(ClientError, ER_PROC_LUA, lua_tostring(L, -1));
 	}
-
-	return 1;
 }
 
 static int

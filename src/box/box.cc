@@ -222,14 +222,13 @@ on_request_next(struct request_trigger *trigger,
 	next->handler(next, request, txn, port, next->data);
 }
 
-static int
+static void
 on_request_raw(struct request_trigger *trigger, struct request *request,
 	       struct txn *txn, struct port *port, void *data)
 {
 	(void) trigger;
 	(void) data;
 	request->execute(request, txn, port);
-	return 0;
 }
 
 static void
