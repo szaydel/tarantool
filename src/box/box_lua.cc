@@ -1992,12 +1992,11 @@ lbox_on_request_trigger(struct request_trigger *trigger,
 }
 
 static int
-lbox_on_request(struct lua_State *L)
+lbox_set_on_request(struct lua_State *L)
 {
-	if (lua_gettop(L) != 1)
-		luaL_error(L, "box.on_request(): bad arguments");
-	if (!lua_isfunction(L, -1))
-		luaL_error(L, "box.on_request(): argument must be a function");
+	if (lua_gettop(L) != 1 || !lua_isfunction(L, -1))
+		luaL_error(L, "box.set_on_request(): "
+			   "argument must be a function");
 
 	size_t ref = luaL_ref(L, LUA_REGISTRYINDEX);
 	int id = add_request_trigger(RT_USER,
@@ -2008,7 +2007,7 @@ lbox_on_request(struct lua_State *L)
 
 
 static int
-lbox_remove_on_request(struct lua_State *L)
+lbox_clear_on_request(struct lua_State *L)
 {
 	int id = lua_tonumber(L, -1);
 	if (remove_request_trigger(id))
@@ -2024,8 +2023,8 @@ static const struct luaL_reg boxlib[] = {
 	{"raise", lbox_raise},
 	{"pack", lbox_pack},
 	{"unpack", lbox_unpack},
-	{"on_request",		lbox_on_request},
-	{"remove_on_request",	lbox_remove_on_request},
+	{"set_on_request", lbox_set_on_request},
+	{"clear_on_request", lbox_clear_on_request},
 	{NULL, NULL}
 };
 
