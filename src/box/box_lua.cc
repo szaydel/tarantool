@@ -1753,7 +1753,7 @@ lbox_on_request_next(struct lua_State *L)
 	int top = lua_gettop(L);
 
 	struct port *port_lua = port_lua_create(L);
-	request_trigger_next(trigger, request, txn, port_lua);
+	on_request_next(trigger, request, txn, port_lua);
 	struct tuple *tuple;
 	if ((tuple = txn->new_tuple) || (tuple = txn->old_tuple)) {
 		port_add_tuple(port_lua, tuple, request->flags |
@@ -1999,8 +1999,7 @@ lbox_set_on_request(struct lua_State *L)
 			   "argument must be a function");
 
 	size_t ref = luaL_ref(L, LUA_REGISTRYINDEX);
-	int id = add_request_trigger(RT_USER,
-			lbox_on_request_trigger, (void *)ref);
+	int id = set_on_request(RT_USER, lbox_on_request_trigger, (void *)ref);
 	lua_pushinteger(L, id);
 	return 1;
 }
@@ -2010,7 +2009,7 @@ static int
 lbox_clear_on_request(struct lua_State *L)
 {
 	int id = lua_tonumber(L, -1);
-	if (remove_request_trigger(id))
+	if (clear_on_request(id))
 		lua_pushboolean(L, 1);
 	else
 		lua_pushboolean(L, 0);

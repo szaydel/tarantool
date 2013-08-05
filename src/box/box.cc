@@ -49,6 +49,7 @@ extern "C" {
 #include "port.h"
 #include "request.h"
 #include "txn.h"
+#include "rlist.h"
 #include <third_party/base64.h>
 
 static void process_replica(struct port *port, struct request *request);
@@ -68,6 +69,19 @@ struct box_snap_row {
 	char data[];
 } __attribute__((packed));
 
+static RLIST_HEAD(executers);
+
+struct request_trigger {
+	struct rlist list;
+	request_execute_handler handler;
+	int type;
+	int id;
+	void *data;
+};
+
+static void
+on_request(struct request *request, struct txn *txn, struct port *port);
+
 static void
 process_rw(struct port *port, struct request *request)
 {
@@ -75,7 +89,7 @@ process_rw(struct port *port, struct request *request)
 
 	try {
 		stat_collect(stat_base, request->type, 1);
-		request_execute(request, txn, port);
+		on_request(request, txn, port);
 		txn_commit(txn);
 		struct tuple *tuple;
 		if (((tuple = txn->new_tuple) || (tuple = txn->old_tuple)) &&
@@ -105,6 +119,117 @@ process_ro(struct port *port, struct request *request)
 	if (!request_is_select(request->type))
 		tnt_raise(LoggedError, ER_SECONDARY);
 	return process_rw(port, request);
+}
+
+int
+set_on_request(int type, request_execute_handler handler, void *data)
+{
+	static int id = 0;
+	int id_found;
+
+	do {
+		id_found = 1;
+		struct request_trigger *t;
+		rlist_foreach_entry(t, &executers, list) {
+			if (id == t->id) {
+				id_found = 0;
+				id++;
+				break;
+			}
+		}
+	} while (!id_found);
+
+	struct request_trigger *t = (struct request_trigger *)
+			malloc(sizeof(struct request_trigger));
+
+	if (!t) {
+		tnt_raise(LoggedError,
+			ER_MEMORY_ISSUE, sizeof(struct request_trigger),
+				"request_trigger", "add");
+	}
+
+	t->type		= type;
+	t->handler	= handler;
+	t->id		= id;
+	t->data		= data;
+
+
+	switch(type) {
+		case RT_SYSTEM_LAST:
+			rlist_add_tail_entry(&executers, t, list);
+			break;
+		case RT_SYSTEM_FIRST:
+			rlist_add_entry(&executers, t, list);
+			break;
+
+		case RT_USER: {
+			struct request_trigger *i;
+			rlist_foreach_entry_reverse(i, &executers, list) {
+				if (i->type != RT_SYSTEM_LAST) {
+					rlist_add_entry(&i->list, t, list);
+					return id;
+				}
+			}
+			rlist_add_entry(&executers, t, list);
+			break;
+		}
+
+		default:
+			panic("Unknown request_trigger type");
+	}
+
+	return id;
+}
+
+int
+clear_on_request(int trigger_id)
+{
+	int count = 0;
+	struct request_trigger *t;
+	rlist_foreach_entry(t, &executers, list) {
+		if (t->id != trigger_id)
+			continue;
+
+		rlist_del_entry(t, list);
+		free(t);
+		count++;
+		break;
+	}
+	return count;
+}
+
+static void
+on_request(struct request *request, struct txn *txn, struct port *port)
+{
+	if (unlikely(rlist_empty(&executers)))
+		return;
+
+	struct request_trigger *first = rlist_first_entry(
+		&executers, struct request_trigger, list);
+	first->handler(first, request, txn, port, first->data);
+}
+
+void
+on_request_next(struct request_trigger *trigger,
+		struct request *request, struct txn *txn,
+		struct port *port)
+{
+	/* No more triggers */
+	if (rlist_last(&executers) == &trigger->list)
+		return;
+
+	struct request_trigger *next = rlist_next_entry(trigger, list);
+	next->handler(next, request, txn, port, next->data);
+}
+
+static int
+on_request_raw(struct request_trigger *trigger, struct request *request,
+	       struct txn *txn, struct port *port, void *data)
+{
+	(void) trigger;
+	(void) data;
+	request->execute(request, txn, port);
+	return 0;
 }
 
 static void
@@ -316,7 +441,7 @@ box_init(bool init_storage)
 	title("loading");
 	atexit(box_free);
 
-	request_init();
+	set_on_request(RT_SYSTEM_LAST, on_request_raw, NULL);
 
 	/* initialization spaces */
 	space_init();

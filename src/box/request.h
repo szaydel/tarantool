@@ -137,47 +137,4 @@ void
 request_create(struct request *request, uint32_t type, const char *data,
 	       uint32_t len);
 
-
-
-/* request triggers */
-typedef
-int(*request_execute_handler)
-(struct request_trigger *, struct request *, struct txn *, struct port *,
-	void *);
-
-enum {
-	RT_SYSTEM_LAST,
-	RT_SYSTEM_FIRST,
-	RT_USER
-};
-
-/**
-* add_request_trigger - add new request trigger
-* @param type - type of trigger (RT_SYSTEM_LAST, RT_SYSTEM_FIRST, RT_USER)
-* @return trigger_id
-*/
-int add_request_trigger(int type, request_execute_handler handler, void *udata);
-
-
-/**
-* remove_request_trigger - remove request trigger by trigger_id
-* @param trigger_id
-* @return count of removed triggers
-*/
-int remove_request_trigger(int trigger_id);
-
-
-void
-request_trigger_next(struct request_trigger *trigger,
-		     struct request *request, struct txn *txn,
-		     struct port *port);
-
-/**
-* request_init - init request system
-*/
-void request_init(void);
-
-void
-request_execute(struct request *request, struct txn *txn, struct port *port);
-
 #endif /* TARANTOOL_BOX_REQUEST_H_INCLUDED */
