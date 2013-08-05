@@ -114,7 +114,7 @@ id = box.on_request(function(req, next) return req.flags end)
 ...
 box.select(23, 12, 1)
 ---
- - 0: {}
+ - 1: {}
 ...
 box.delete(24, 12, 1)
 ---
@@ -242,4 +242,8 @@ id = box.on_request(function(req, next) tuple = next(req); print(tuple); return 
 box.replace(0, 1, 2, 3, 4)
 ---
  - 1: {2, 3, 4}
+...
+box.remove_on_request(id)
+---
+ - true
 ...
