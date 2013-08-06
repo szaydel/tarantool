@@ -33,16 +33,140 @@ box.select(0, 0, 1)
 ---
  - 1: {'te-test'}
 ...
-ctx = box.set_on_request(function(ctx, req, next) next() end)
+ctx = box.set_on_request(function(ctx, req, next) return next() end)
 ---
 ...
 box.select(0, 0, 1)
 ---
-error: 'Lua error: [string "ctx = box.set_on_request(function(ctx, req, n..."]:1: request expected as 1 argument 1'
+error: 'Lua error: request expected as 1 argument'
 ...
 box.clear_on_request(ctx)
 ---
  - true
+...
+ctx = box.set_on_request(function(ctx, req, next) return next(req) end)
+---
+...
+box.select(0, 0, 1)
+---
+ - 1: {'te-test'}
+...
+SELECT * FROM t0 WHERE k0 = 1
+Found 1 tuple:
+[1, 'te-test']
+box.replace(0, 1, 2, 3)
+---
+ - 1: {2, 3}
+...
+REPLACE INTO t0 VALUES(1, 2, 3)
+Replace OK, 1 row affected
+box.clear_on_request(ctx)
+---
+ - true
+...
+ctx = box.set_on_request(function(ctx, req, next) t = next(req); return 1,2,3,'Hello' end)
+---
+...
+box.select(0, 0, 1)
+---
+ - 1: {}
+ - 2: {}
+ - 3: {}
+ - 'Hello': {}
+...
+SELECT * FROM t0 WHERE k0 = 1
+Found 4 tuples:
+[1]
+[2]
+[3]
+['Hello']
+box.replace(0, 1, 2, 3)
+---
+ - 1: {}
+ - 2: {}
+ - 3: {}
+ - 'Hello': {}
+...
+REPLACE INTO t0 VALUES(1, 2, 3)
+Replace OK, 4 row affected
+box.clear_on_request(ctx)
+---
+ - true
+...
+box.select(0, 0, 5)
+---
+...
+ctx = box.set_on_request(function(ctx, req, next) next(req); return 666 end)
+---
+...
+box.select(0, 0, 5)
+---
+ - 666: {}
+...
+SELECT * FROM t0 WHERE k0 = 5
+Found 1 tuple:
+[666]
+box.replace(0, 5)
+---
+ - 666: {}
+...
+REPLACE INTO t0 VALUES(5)
+Replace OK, 1 row affected
+box.select(0, 0, 5)
+---
+ - 666: {}
+...
+SELECT * FROM t0 WHERE k0 = 5
+Found 1 tuple:
+[666]
+box.clear_on_request(ctx)
+---
+ - true
+...
+box.select(0, 0, 5)
+---
+ - 5: {}
+...
+SELECT * FROM t0 WHERE k0 = 5
+Found 1 tuple:
+[5]
+ctx = box.set_on_request(function(ctx, req, next)local tuple = next(req); return {'t[1] value is ', tuple[1]}end)
+---
+...
+box.select(0, 0, 1)
+---
+ - 't[1] value is ': {2}
+...
+ctx2 = box.set_on_request(function(ctx, req, next)if req.type == 'CALL' and req.procname == 'ping' then    return 'pong!';else    return next(req);end;end)
+---
+...
+CALL ping()
+Found 1 tuple:
+['pong!']
+box.select(0, 0, 1)
+---
+ - 't[1] value is ': {2}
+...
+box.clear_on_request(ctx)
+---
+ - true
+...
+CALL ping()
+Found 1 tuple:
+['pong!']
+box.select(0, 0, 1)
+---
+ - 1: {2, 3}
+...
+box.clear_on_request(ctx2)
+---
+ - true
+...
+CALL ping()
+An error occurred: ER_NO_SUCH_PROC, 'Procedure 'ping' is not defined'
+box.select(0, 0, 1)
+---
+ - 1: {2, 3}
 ...
 ctx = box.set_on_request(function(ctx2, req, next) assert (ctx2 == ctx) end)
 ---
@@ -54,12 +178,22 @@ box.clear_on_request(ctx)
 ---
  - true
 ...
-ctx = box.set_on_request(function(ctx, req, next) return { 1, 're-test' } end)
+ctx = box.set_on_request(function(ctx, req, next)ctx.count = ctx.count + 1;return ctx.msg;end)
+---
+...
+ctx.msg = 'Check context'
+---
+...
+ctx.count = 0
 ---
 ...
 box.select(0, 0, 1)
 ---
- - 1: {'re-test'}
+ - 'Check context': {}
+...
+ctx.count
+---
+ - 1
 ...
 box.clear_on_request(ctx)
 ---

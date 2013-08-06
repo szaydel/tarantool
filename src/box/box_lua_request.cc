@@ -212,7 +212,7 @@ struct request *
 lbox_checkrequest(struct lua_State *L, int narg)
 {
 	if (!lua_istable(L, narg)) {
-		luaL_error(L, "request expected as %d argument 1", narg);
+		luaL_error(L, "request expected as %d argument", narg);
 		return NULL;
 	}
 
@@ -220,7 +220,7 @@ lbox_checkrequest(struct lua_State *L, int narg)
 	lua_rawget (L, narg);
 	struct request *request = (struct request *) lua_touserdata(L, -1);
 	if (request == NULL) {
-		luaL_error(L, "request expected as %d argument 2", narg);
+		luaL_error(L, "request expected as %d argument", narg);
 		return NULL;
 	}
 	return request;
