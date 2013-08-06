@@ -31,6 +31,7 @@ tarantool_module("box"
     box.cc
     ${lua_sources}
     box_lua.cc
-    box_lua_space.cc)
+    box_lua_space.cc
+    box_lua_request.cc)
 
 target_link_libraries(tarantool_box bitset)
