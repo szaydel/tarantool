@@ -1973,32 +1973,31 @@ lbox_request_trigger(struct request_trigger *ptr, struct request *request,
 	lua_State *L = lua_newthread(tarantool_L);
 
 	int coro_ref = luaL_ref(tarantool_L, LUA_REGISTRYINDEX);
+	auto scoped_guard = make_scoped_guard([=] {
+		luaL_unref(tarantool_L, LUA_REGISTRYINDEX, coro_ref);
+	});
 
+	/* Get trigger context */
 	lua_rawgeti(tarantool_L, LUA_REGISTRYINDEX, trigger->table_ref);
 	lua_xmove(tarantool_L, L, 1);
 
 	/* Get the callback function */
 	lua_pushstring(L, "fun");
 	lua_gettable(L, 1);
-	lua_replace(L, 1);
 
-	auto scoped_guard = make_scoped_guard([=] {
-		luaL_unref(tarantool_L, LUA_REGISTRYINDEX, coro_ref);
-	});
+	/* context is the first argument */
+	lua_insert(L, 1);
+
+	/* request is the second argument */
+	lbox_pushrequest(L, request);
+
+	/* next() is the third argument */
+	lua_pushlightuserdata(L, trigger);
+	lua_pushlightuserdata(L, txn);
+	lua_pushcclosure(L, lbox_on_request_next, 2);
 
 	try {
-		/* context is the first argument */
-		/* lua_pushvalue(L, 1); */
-
-		/* request is the second argument */
-		lbox_pushrequest(L, request);
-
-		/* next() is the third argument */
-		lua_pushlightuserdata(L, trigger);
-		lua_pushlightuserdata(L, txn);
-		lua_pushcclosure(L, lbox_on_request_next, 2);
-		lua_call(L, 2, LUA_MULTRET);
-
+		lua_call(L, 3, LUA_MULTRET);
 		port_add_lua_multret(port, L, request->flags);
 		request->flags |= BOX_IGNORE_TXN_TUPLES;
 	} catch(const Exception& e) {
