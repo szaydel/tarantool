@@ -1737,15 +1737,21 @@ lbox_unpack(struct lua_State *L)
 #undef CHECK_SIZE
 }
 
-static const char *on_request_trigger_lib_name = "box.on_request";
+/*
+ * A Lua bindings for on-request trigger
+ */
 
-static const struct luaL_reg lbox_request_trigger_meta[] = {
+static const char *on_request_trigger_lib_name = "box.on_request";
+static const struct luaL_reg lbox_on_request_trigger_meta[] = {
 	{NULL, NULL}
 };
 
-struct lbox_request_trigger {
-	struct request_trigger base;
+struct lbox_on_request_trigger {
+	/* Base trigger - must be the first member */
+	struct on_request_trigger base;
+	/* A reference to context */
 	int table_ref;
+	/* A refrence to userdata */
 	int udata_ref;
 };
 
@@ -1753,30 +1759,38 @@ static int
 lbox_on_request_next(struct lua_State *L)
 {
 	struct request *request = lbox_checkrequest(L, 1);
-	struct lbox_request_trigger *trigger = (struct lbox_request_trigger *)
+	struct lbox_on_request_trigger *trigger =
+			(struct lbox_on_request_trigger *)
 			lua_touserdata(L, lua_upvalueindex(1));
 	struct txn *txn = (struct txn *)
 			lua_touserdata(L, lua_upvalueindex(2));
 
+	/*
+	 * Create a temporary port_lua and collect all tuples from
+	 * on_request_trigger_next call.
+	 */
 	int top = lua_gettop(L);
-
 	struct port *port_lua = port_lua_create(L);
-	on_request_next(&trigger->base, request, txn, port_lua);
+	on_request_trigger_next(&trigger->base, request, txn, port_lua);
+
+	/* Add tuples from the temporary port to the Lua stack */
 	struct tuple *tuple;
 	if ((tuple = txn->new_tuple) || (tuple = txn->old_tuple)) {
+		/* Force BOX_RETURN_TUPLE here */
 		port_add_tuple(port_lua, tuple, request->flags |
 			       BOX_RETURN_TUPLE);
 	}
 
+	/* Return the number of tuples */
 	return lua_gettop(L) - top;
 }
 
 static void
-lbox_request_trigger(struct request_trigger *ptr, struct request *request,
+lbox_on_request_trigger(struct on_request_trigger *ptr, struct request *request,
 		     struct txn *txn, struct port *port)
 {
-	struct lbox_request_trigger *trigger =
-			(struct lbox_request_trigger *) ptr;
+	struct lbox_on_request_trigger *trigger =
+			(struct lbox_on_request_trigger *) ptr;
 	(void)txn;
 
 	lua_State *L = lua_newthread(tarantool_L);
@@ -1786,7 +1800,12 @@ lbox_request_trigger(struct request_trigger *ptr, struct request *request,
 		luaL_unref(tarantool_L, LUA_REGISTRYINDEX, coro_ref);
 	});
 
-	/* Get trigger context */
+	/*
+	 * The code below calls ctx:fun(request, next) where
+	 * ctx is a Lua table returned by box.set_on_request(fun).
+	 */
+
+	/* Get the trigger context */
 	lua_rawgeti(tarantool_L, LUA_REGISTRYINDEX, trigger->table_ref);
 	lua_xmove(tarantool_L, L, 1);
 
@@ -1807,7 +1826,9 @@ lbox_request_trigger(struct request_trigger *ptr, struct request *request,
 
 	try {
 		lua_call(L, 3, LUA_MULTRET);
+		/* Add all tuples from the Lua stack into the port */
 		port_add_lua_multret(port, L, request->flags);
+		/* Do not duplicate tuples from the txn into the port */
 		request->flags |= BOX_IGNORE_TXN_TUPLES;
 	} catch(const Exception& e) {
 		throw;
@@ -1825,30 +1846,32 @@ lbox_set_on_request(struct lua_State *L)
 
 	lua_newtable(L);
 	lua_pushvalue(L, -1);
+	/* Save a reference to the trigger's context */
 	int table_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
-	/* A callback function */
+	/* A trigger's callback function */
 	lua_pushstring(L, "fun");
 	lua_pushvalue(L, 1);
 	lua_settable(L, -3);
 
-	/* Trigger's userdata */
+	/* A trigger's userdata */
 	lua_pushstring(L, "trigger");
-	struct lbox_request_trigger *trigger =
-		(struct lbox_request_trigger *)
-				lua_newuserdata(L, sizeof(*trigger));
+	struct lbox_on_request_trigger *trigger =
+		(struct lbox_on_request_trigger *)
+			lua_newuserdata(L, sizeof(*trigger));
 	luaL_getmetatable(L, on_request_trigger_lib_name);
 	lua_setmetatable(L, -2);
 	lua_pushvalue(L, -1);
+	/* Save a reference to the trigger's userdata */
 	int udata_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-	memset(trigger, 0, sizeof(*trigger));
-	trigger->base.handler = lbox_request_trigger;
+	rlist_create(&trigger->base.list);
+	trigger->base.handler = lbox_on_request_trigger;
 	trigger->table_ref = table_ref;
 	trigger->udata_ref = udata_ref;
 	lua_settable(L, -3);
 
 	/* Add the trigger to the start of the list */
-	rlist_add_entry(&executers, &trigger->base, list);
+	rlist_add_entry(&on_request, &trigger->base, list);
 	return 1;
 }
 
@@ -1860,9 +1883,9 @@ lbox_clear_on_request(struct lua_State *L)
 
 	lua_pushstring(L, "trigger");
 	lua_rawget (L, 1);
-	struct lbox_request_trigger *trigger =
-		(struct lbox_request_trigger *)
-		luaL_checkudata(L, -1, on_request_trigger_lib_name);
+	struct lbox_on_request_trigger *trigger =
+		(struct lbox_on_request_trigger *)
+			luaL_checkudata(L, -1, on_request_trigger_lib_name);
 
 	if (rlist_empty(&trigger->base.list)) {
 		lua_pushboolean(L, 0);
@@ -1901,7 +1924,7 @@ mod_lua_init(struct lua_State *L)
 	lua_pop(L, 1);
 	/* box.on_request */
 	tarantool_lua_register_type(L, on_request_trigger_lib_name,
-				    lbox_request_trigger_meta);
+				    lbox_on_request_trigger_meta);
 	/* box.index */
 	tarantool_lua_register_type(L, indexlib_name, lbox_index_meta);
 	luaL_register(L, "box.index", indexlib);

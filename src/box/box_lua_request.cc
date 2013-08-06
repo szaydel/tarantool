@@ -56,7 +56,7 @@ lbox_request_push_key(struct lua_State *L, const char **keypos,
 static int
 lbox_request_index(struct lua_State *L)
 {
-	lua_pushstring(L, "raw");
+	lua_pushstring(L, "request");
 	lua_gettable(L, 1);
 	struct request *request = (struct request *) lua_touserdata(L, -1);
 	lua_pop(L, 1);
@@ -131,7 +131,7 @@ int
 lbox_pushrequest(struct lua_State *L, struct request *request)
 {
 	lua_newtable(L);
-	lua_pushstring(L, "raw");
+	lua_pushstring(L, "request");
 	lua_pushlightuserdata(L, request);
 	lua_settable(L, -3);
 
@@ -216,7 +216,7 @@ lbox_checkrequest(struct lua_State *L, int narg)
 		return NULL;
 	}
 
-	lua_pushstring(L, "raw");
+	lua_pushstring(L, "request");
 	lua_rawget (L, narg);
 	struct request *request = (struct request *) lua_touserdata(L, -1);
 	if (request == NULL) {

@@ -102,23 +102,31 @@ enum {
 	BOX_FIELD_MAX = UINT32_MAX
 };
 
-
-/* request triggers */
-typedef
-void (*request_trigger_f)
-(struct request_trigger *, struct request *, struct txn *, struct port *);
-
-struct request_trigger {
+/**
+ * @brief on-request trigger
+ */
+struct on_request_trigger {
 	struct rlist list;
-	request_trigger_f handler;
+	void (*handler) (struct on_request_trigger *, struct request *,
+			 struct txn *, struct port *);
 };
 
-extern struct rlist executers;
+/**
+ * @brief List of on-request triggers
+ */
+extern struct rlist on_request;
 
+/**
+ * @brief Execute the next trigger in the chain
+ * @param trigger current trigger
+ * @param request a request
+ * @param txn a transaction
+ * @param port a port
+ */
 void
-on_request_next(struct request_trigger *trigger,
-		struct request *request, struct txn *txn,
-		struct port *port);
+on_request_trigger_next(struct on_request_trigger *trigger,
+			struct request *request, struct txn *txn,
+			struct port *port);
 
 #if defined(__cplusplus)
 }

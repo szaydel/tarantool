@@ -63,10 +63,11 @@ struct box_snap_row {
 	char data[];
 } __attribute__((packed));
 
-RLIST_HEAD(executers);
+RLIST_HEAD(on_request);
 
 static void
-on_request(struct request *request, struct txn *txn, struct port *port);
+on_request_trigger_run(struct request *request, struct txn *txn,
+		       struct port *port);
 
 void
 box_process(struct port *port, struct request *request)
@@ -75,7 +76,7 @@ box_process(struct port *port, struct request *request)
 
 	try {
 		stat_collect(stat_base, request->type, 1);
-		on_request(request, txn, port);
+		on_request_trigger_run(request, txn, port);
 		txn_commit(txn);
 		struct tuple *tuple;
 		if (((tuple = txn->new_tuple) || (tuple = txn->old_tuple)) &&
@@ -98,40 +99,41 @@ box_process_ro(struct port *port, struct request *request)
 }
 
 static void
-on_request(struct request *request, struct txn *txn, struct port *port)
+on_request_trigger_run(struct request *request, struct txn *txn,
+		       struct port *port)
 {
-	if (unlikely(rlist_empty(&executers)))
+	if (unlikely(rlist_empty(&on_request)))
 		return;
 
-	struct request_trigger *first = rlist_first_entry(
-		&executers, struct request_trigger, list);
+	struct on_request_trigger *first = rlist_first_entry(
+		&on_request, struct on_request_trigger, list);
 	first->handler(first, request, txn, port);
 }
 
 void
-on_request_next(struct request_trigger *trigger,
+on_request_trigger_next(struct on_request_trigger *trigger,
 		struct request *request, struct txn *txn,
 		struct port *port)
 {
-	/* No more triggers */
-	if (rlist_last(&executers) == &trigger->list)
-		return;
+	if (rlist_last(&on_request) == &trigger->list)
+		return; /* No more triggers */
 
-	struct request_trigger *next = rlist_next_entry(trigger, list);
+	struct on_request_trigger *next = rlist_next_entry(trigger, list);
 	next->handler(next, request, txn, port);
 }
 
 static void
-on_request_local_trigger(struct request_trigger *trigger,
+on_request_trigger_local(struct on_request_trigger *trigger,
 			 struct request *request, struct txn *txn,
 			 struct port *port)
 {
 	(void) trigger;
+	assert (request->execute != NULL);
 	request->execute(request, txn, port);
 }
 
 static void
-on_request_replica_trigger(struct request_trigger *trigger,
+on_request_trigger_replica(struct on_request_trigger *trigger,
 			   struct request *request, struct txn *txn,
 			   struct port *port)
 {
@@ -140,17 +142,19 @@ on_request_replica_trigger(struct request_trigger *trigger,
 			  cfg.replication_source);
 	}
 
-	on_request_next(trigger, request, txn, port);
+	on_request_trigger_next(trigger, request, txn, port);
 }
 
-static struct request_trigger on_request_local = {
+/* The global instance of on-request trigger used to process local queries */
+static struct on_request_trigger on_request_local = {
 	{ &on_request_local.list, &on_request_local.list },    /* list */
-	on_request_local_trigger                               /* handler */
+	on_request_trigger_local                               /* handler */
 };
 
-static struct request_trigger on_request_replica = {
+/* The global instance of on-request trigger used to process replica queries */
+static struct on_request_trigger on_request_replica = {
 	{ &on_request_replica.list, &on_request_replica.list }, /* list */
-	on_request_replica_trigger                              /* handler */
+	on_request_trigger_replica                              /* handler */
 };
 
 static void
@@ -229,8 +233,8 @@ box_enter_master_or_replica_mode(struct tarantool_cfg *conf)
 	rlist_del_entry(&on_request_local, list);
 	rlist_del_entry(&on_request_replica, list);
 	if (conf->replication_source != NULL) {
-		rlist_add_tail_entry(&executers, &on_request_replica, list);
-		rlist_add_tail_entry(&executers, &on_request_local, list);
+		rlist_add_tail_entry(&on_request, &on_request_replica, list);
+		rlist_add_tail_entry(&on_request, &on_request_local, list);
 
 		recovery_wait_lsn(recovery_state, recovery_state->lsn);
 		recovery_follow_remote(recovery_state, conf->replication_source);
@@ -240,7 +244,7 @@ box_enter_master_or_replica_mode(struct tarantool_cfg *conf)
 		title("replica/%s%s", conf->replication_source,
 		      custom_proc_title);
 	} else {
-		rlist_add_tail_entry(&executers, &on_request_local, list);
+		rlist_add_tail_entry(&on_request, &on_request_local, list);
 
 		memcached_start_expire();
 
@@ -365,7 +369,7 @@ box_init(bool init_storage)
 	title("loading");
 	atexit(box_free);
 
-	rlist_add_entry(&executers, &on_request_local, list);
+	rlist_add_entry(&on_request, &on_request_local, list);
 
 	/* initialization spaces */
 	space_init();
