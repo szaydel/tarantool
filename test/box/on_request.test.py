@@ -1,3 +1,5 @@
+admin("box.space[0]:truncate()")
+
 admin("box.insert(0, 1, 'te-test')")
 admin("box.select(0, 0, 1)")
 
@@ -158,3 +160,5 @@ admin("box.clear_on_request(ctx)")
 admin("ctx = box.set_on_request(function(ctx, req, next) tuple = next(req); print(tuple); return tuple end)")
 admin("box.replace(0, 1, 2, 3, 4)")
 admin("box.clear_on_request(ctx)")
+
+admin("box.space[0]:truncate()")

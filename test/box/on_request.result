@@ -1,3 +1,6 @@
+box.space[0]:truncate()
+---
+...
 box.insert(0, 1, 'te-test')
 ---
  - 1: {'te-test'}
@@ -390,4 +393,7 @@ box.replace(0, 1, 2, 3, 4)
 box.clear_on_request(ctx)
 ---
  - true
+...
+box.space[0]:truncate()
+---
 ...
