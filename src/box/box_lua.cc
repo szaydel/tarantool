@@ -1737,6 +1737,17 @@ lbox_unpack(struct lua_State *L)
 #undef CHECK_SIZE
 }
 
+static const char *on_request_trigger_lib_name = "box.on_request";
+
+static const struct luaL_reg lbox_request_trigger_meta[] = {
+	{NULL, NULL}
+};
+
+struct lbox_request_trigger {
+	struct request_trigger base;
+	int table_ref;
+	int udata_ref;
+};
 
 static struct request *
 lbox_checkrequest(struct lua_State *L, int narg);
@@ -1745,7 +1756,7 @@ static int
 lbox_on_request_next(struct lua_State *L)
 {
 	struct request *request = lbox_checkrequest(L, 1);
-	struct request_trigger *trigger = (struct request_trigger *)
+	struct lbox_request_trigger *trigger = (struct lbox_request_trigger *)
 			lua_touserdata(L, lua_upvalueindex(1));
 	struct txn *txn = (struct txn *)
 			lua_touserdata(L, lua_upvalueindex(2));
@@ -1753,7 +1764,7 @@ lbox_on_request_next(struct lua_State *L)
 	int top = lua_gettop(L);
 
 	struct port *port_lua = port_lua_create(L);
-	on_request_next(trigger, request, txn, port_lua);
+	on_request_next(&trigger->base, request, txn, port_lua);
 	struct tuple *tuple;
 	if ((tuple = txn->new_tuple) || (tuple = txn->old_tuple)) {
 		port_add_tuple(port_lua, tuple, request->flags |
@@ -1952,28 +1963,38 @@ lbox_checkrequest(struct lua_State *L, int narg)
 }
 
 static void
-lbox_on_request_trigger(struct request_trigger *trigger,
+lbox_request_trigger(struct request_trigger *ptr,
 	struct request *request, struct txn *txn, struct port *port, void *data)
 {
+	struct lbox_request_trigger *trigger =
+			(struct lbox_request_trigger *) ptr;
 	(void)txn;
+	(void)data;
 
-	int ref = (int)(size_t)data;
 	lua_State *L = lua_newthread(tarantool_L);
 
 	int coro_ref = luaL_ref(tarantool_L, LUA_REGISTRYINDEX);
 
-	lua_rawgeti(tarantool_L, LUA_REGISTRYINDEX, ref);
+	lua_rawgeti(tarantool_L, LUA_REGISTRYINDEX, trigger->table_ref);
 	lua_xmove(tarantool_L, L, 1);
+
+	/* Get the callback function */
+	lua_pushstring(L, "fun");
+	lua_gettable(L, 1);
+	lua_replace(L, 1);
 
 	auto scoped_guard = make_scoped_guard([=] {
 		luaL_unref(tarantool_L, LUA_REGISTRYINDEX, coro_ref);
 	});
 
 	try {
-		/* request is the first argument */
+		/* context is the first argument */
+		/* lua_pushvalue(L, 1); */
+
+		/* request is the second argument */
 		lbox_pushrequest(L, request);
 
-		/* next() is the second argument */
+		/* next() is the third argument */
 		lua_pushlightuserdata(L, trigger);
 		lua_pushlightuserdata(L, txn);
 		lua_pushcclosure(L, lbox_on_request_next, 2);
@@ -1995,21 +2016,56 @@ lbox_set_on_request(struct lua_State *L)
 		luaL_error(L, "box.set_on_request(): "
 			   "argument must be a function");
 
-	size_t ref = luaL_ref(L, LUA_REGISTRYINDEX);
-	int id = set_on_request(RT_USER, lbox_on_request_trigger, (void *)ref);
-	lua_pushinteger(L, id);
+	lua_newtable(L);
+	lua_pushvalue(L, -1);
+	int table_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+
+	/* A callback function */
+	lua_pushstring(L, "fun");
+	lua_pushvalue(L, 1);
+	lua_settable(L, -3);
+
+	/* Trigger's userdata */
+	lua_pushstring(L, "trigger");
+	struct lbox_request_trigger *trigger =
+		(struct lbox_request_trigger *)
+				lua_newuserdata(L, sizeof(*trigger));
+	luaL_getmetatable(L, on_request_trigger_lib_name);
+	lua_setmetatable(L, -2);
+	lua_pushvalue(L, -1);
+	int udata_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+	memset(trigger, 0, sizeof(*trigger));
+	trigger->base.handler = lbox_request_trigger;
+	trigger->table_ref = table_ref;
+	trigger->udata_ref = udata_ref;
+	lua_settable(L, -3);
+
+	/* Add the trigger to the start of the list */
+	rlist_add_entry(&executers, &trigger->base, list);
 	return 1;
 }
-
 
 static int
 lbox_clear_on_request(struct lua_State *L)
 {
-	int id = lua_tonumber(L, -1);
-	if (clear_on_request(id))
-		lua_pushboolean(L, 1);
-	else
+	if (!lua_istable(L, 1))
+		return luaL_error(L, "on_request expected as 1 argument");
+
+	lua_pushstring(L, "trigger");
+	lua_rawget (L, 1);
+	struct lbox_request_trigger *trigger =
+		(struct lbox_request_trigger *)
+		luaL_checkudata(L, -1, on_request_trigger_lib_name);
+
+	if (rlist_empty(&trigger->base.list)) {
 		lua_pushboolean(L, 0);
+		return 1;
+	}
+
+	rlist_del_entry(&trigger->base, list);
+	luaL_unref(L, LUA_REGISTRYINDEX, trigger->table_ref);
+	luaL_unref(L, LUA_REGISTRYINDEX, trigger->udata_ref);
+	lua_pushboolean(L, 1);
 	return 1;
 }
 
@@ -2036,6 +2092,9 @@ mod_lua_init(struct lua_State *L)
 				    lbox_tuple_iterator_meta);
 	luaL_register(L, "box", boxlib);
 	lua_pop(L, 1);
+	/* box.on_request */
+	tarantool_lua_register_type(L, on_request_trigger_lib_name,
+				    lbox_request_trigger_meta);
 	/* box.index */
 	tarantool_lua_register_type(L, indexlib_name, lbox_index_meta);
 	luaL_register(L, "box.index", indexlib);

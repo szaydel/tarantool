@@ -69,15 +69,7 @@ struct box_snap_row {
 	char data[];
 } __attribute__((packed));
 
-static RLIST_HEAD(executers);
-
-struct request_trigger {
-	struct rlist list;
-	request_execute_handler handler;
-	int type;
-	int id;
-	void *data;
-};
+RLIST_HEAD(executers);
 
 static void
 on_request(struct request *request, struct txn *txn, struct port *port);
@@ -119,83 +111,6 @@ process_ro(struct port *port, struct request *request)
 	if (!request_is_select(request->type))
 		tnt_raise(LoggedError, ER_SECONDARY);
 	return process_rw(port, request);
-}
-
-int
-set_on_request(int type, request_execute_handler handler, void *data)
-{
-	static int id = 0;
-	int id_found;
-
-	do {
-		id_found = 1;
-		struct request_trigger *t;
-		rlist_foreach_entry(t, &executers, list) {
-			if (id == t->id) {
-				id_found = 0;
-				id++;
-				break;
-			}
-		}
-	} while (!id_found);
-
-	struct request_trigger *t = (struct request_trigger *)
-			malloc(sizeof(struct request_trigger));
-
-	if (!t) {
-		tnt_raise(LoggedError,
-			ER_MEMORY_ISSUE, sizeof(struct request_trigger),
-				"request_trigger", "add");
-	}
-
-	t->type		= type;
-	t->handler	= handler;
-	t->id		= id;
-	t->data		= data;
-
-
-	switch(type) {
-		case RT_SYSTEM_LAST:
-			rlist_add_tail_entry(&executers, t, list);
-			break;
-		case RT_SYSTEM_FIRST:
-			rlist_add_entry(&executers, t, list);
-			break;
-
-		case RT_USER: {
-			struct request_trigger *i;
-			rlist_foreach_entry_reverse(i, &executers, list) {
-				if (i->type != RT_SYSTEM_LAST) {
-					rlist_add_entry(&i->list, t, list);
-					return id;
-				}
-			}
-			rlist_add_entry(&executers, t, list);
-			break;
-		}
-
-		default:
-			panic("Unknown request_trigger type");
-	}
-
-	return id;
-}
-
-int
-clear_on_request(int trigger_id)
-{
-	int count = 0;
-	struct request_trigger *t;
-	rlist_foreach_entry(t, &executers, list) {
-		if (t->id != trigger_id)
-			continue;
-
-		rlist_del_entry(t, list);
-		free(t);
-		count++;
-		break;
-	}
-	return count;
 }
 
 static void
@@ -434,13 +349,19 @@ box_free(void)
 	space_free();
 }
 
+static struct request_trigger on_request_local = {
+	{ NULL, NULL }, /* list */
+	on_request_raw, /* handler */
+	NULL            /* udata */
+};
+
 void
 box_init(bool init_storage)
 {
 	title("loading");
 	atexit(box_free);
 
-	set_on_request(RT_SYSTEM_LAST, on_request_raw, NULL);
+	rlist_add_entry(&executers, &on_request_local, list);
 
 	/* initialization spaces */
 	space_init();

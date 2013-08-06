@@ -30,6 +30,8 @@
  */
 #include "tarantool/util.h"
 
+#include "rlist.h"
+
 #if defined(__cplusplus)
 extern "C" {
 #endif /* defined(__cplusplus) */
@@ -109,26 +111,13 @@ void (*request_execute_handler)
 (struct request_trigger *, struct request *, struct txn *, struct port *,
 	void *);
 
-enum {
-	RT_SYSTEM_LAST,
-	RT_SYSTEM_FIRST,
-	RT_USER
+struct request_trigger {
+	struct rlist list;
+	request_execute_handler handler;
+	void *data;
 };
 
-/**
-* set_on_request - add new request trigger
-* @param type - type of trigger (RT_SYSTEM_LAST, RT_SYSTEM_FIRST, RT_USER)
-* @return trigger_id
-*/
-int set_on_request(int type, request_execute_handler handler, void *udata);
-
-
-/**
-* clear_on_request - remove request trigger by trigger_id
-* @param trigger_id
-* @return count of removed triggers
-*/
-int clear_on_request(int trigger_id);
+extern struct rlist executers;
 
 void
 on_request_next(struct request_trigger *trigger,
