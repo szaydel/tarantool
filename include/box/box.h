@@ -107,14 +107,12 @@ enum {
 
 /* request triggers */
 typedef
-void (*request_execute_handler)
-(struct request_trigger *, struct request *, struct txn *, struct port *,
-	void *);
+void (*request_trigger_f)
+(struct request_trigger *, struct request *, struct txn *, struct port *);
 
 struct request_trigger {
 	struct rlist list;
-	request_execute_handler handler;
-	void *data;
+	request_trigger_f handler;
 };
 
 extern struct rlist executers;

@@ -121,7 +121,7 @@ on_request(struct request *request, struct txn *txn, struct port *port)
 
 	struct request_trigger *first = rlist_first_entry(
 		&executers, struct request_trigger, list);
-	first->handler(first, request, txn, port, first->data);
+	first->handler(first, request, txn, port);
 }
 
 void
@@ -134,15 +134,14 @@ on_request_next(struct request_trigger *trigger,
 		return;
 
 	struct request_trigger *next = rlist_next_entry(trigger, list);
-	next->handler(next, request, txn, port, next->data);
+	next->handler(next, request, txn, port);
 }
 
 static void
 on_request_raw(struct request_trigger *trigger, struct request *request,
-	       struct txn *txn, struct port *port, void *data)
+	       struct txn *txn, struct port *port)
 {
 	(void) trigger;
-	(void) data;
 	request->execute(request, txn, port);
 }
 
@@ -351,8 +350,7 @@ box_free(void)
 
 static struct request_trigger on_request_local = {
 	{ NULL, NULL }, /* list */
-	on_request_raw, /* handler */
-	NULL            /* udata */
+	on_request_raw  /* handler */
 };
 
 void

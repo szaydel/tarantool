@@ -1963,13 +1963,12 @@ lbox_checkrequest(struct lua_State *L, int narg)
 }
 
 static void
-lbox_request_trigger(struct request_trigger *ptr,
-	struct request *request, struct txn *txn, struct port *port, void *data)
+lbox_request_trigger(struct request_trigger *ptr, struct request *request,
+		     struct txn *txn, struct port *port)
 {
 	struct lbox_request_trigger *trigger =
 			(struct lbox_request_trigger *) ptr;
 	(void)txn;
-	(void)data;
 
 	lua_State *L = lua_newthread(tarantool_L);
 
