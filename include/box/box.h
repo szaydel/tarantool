@@ -56,17 +56,15 @@ void box_init(bool init_storage);
 void box_free(void);
 
 /**
- * The main entry point to the
- * Box: callbacks into the request processor.
- * These are function pointers since they can
- * change when entering/leaving read-only mode
- * (master->slave propagation).
+ * The main entry point to the Box
  */
 typedef void (*box_process_func)(struct port *port, struct request *request);
 /** For read-write operations. */
-extern box_process_func box_process;
+void
+box_process(struct port *port, struct request *request);
 /** For read-only port. */
-extern box_process_func box_process_ro;
+void
+box_process_ro(struct port *port, struct request *request);
 
 /*
  * Check storage-layer related options in the

@@ -269,7 +269,7 @@ struct iproto_session
 	 * Function of the request processor to handle
 	 * a single request.
 	 */
-	box_process_func *handler;
+	box_process_func handler;
 	struct ev_io input;
 	struct ev_io output;
 	/** Session id. */
@@ -319,7 +319,7 @@ static void
 iproto_process_disconnect(struct iproto_request *request);
 
 static struct iproto_session *
-iproto_session_create(const char *name, int fd, box_process_func *param)
+iproto_session_create(const char *name, int fd, box_process_func param)
 {
 	struct iproto_session *session;
 	if (SLIST_EMPTY(&iproto_session_cache)) {
@@ -742,8 +742,8 @@ iproto_on_accept(struct evio_service *service, int fd,
 
 	struct iproto_session *session;
 
-	box_process_func *process_fun =
-		(box_process_func*) service->on_accept_param;
+	box_process_func process_fun =
+		(box_process_func) service->on_accept_param;
 	session = iproto_session_create(name, fd, process_fun);
 	iproto_enqueue_request(&request_queue, session,
 			       session->iobuf[0], &dummy_header,
@@ -763,7 +763,7 @@ iproto_init(const char *bind_ipaddr, int primary_port,
 		static struct evio_service primary;
 		evio_service_init(&primary, "primary",
 				  bind_ipaddr, primary_port,
-				  iproto_on_accept, &box_process);
+				  iproto_on_accept, (void *) box_process);
 		evio_service_on_bind(&primary,
 				     box_leave_local_standby_mode, NULL);
 		evio_service_start(&primary);
@@ -774,7 +774,7 @@ iproto_init(const char *bind_ipaddr, int primary_port,
 		static struct evio_service secondary;
 		evio_service_init(&secondary, "secondary",
 				  bind_ipaddr, secondary_port,
-				  iproto_on_accept, &box_process_ro);
+				  iproto_on_accept, (void *) box_process_ro);
 		evio_service_start(&secondary);
 	}
 	iproto_queue_init(&request_queue, IPROTO_REQUEST_QUEUE_SIZE,

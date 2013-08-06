@@ -52,12 +52,6 @@ extern "C" {
 #include "rlist.h"
 #include <third_party/base64.h>
 
-static void process_replica(struct port *port, struct request *request);
-static void process_ro(struct port *port, struct request *request);
-static void process_rw(struct port *port, struct request *request);
-box_process_func box_process = process_ro;
-box_process_func box_process_ro = process_ro;
-
 static char status[64] = "unknown";
 
 static int stat_base;
@@ -74,8 +68,8 @@ RLIST_HEAD(executers);
 static void
 on_request(struct request *request, struct txn *txn, struct port *port);
 
-static void
-process_rw(struct port *port, struct request *request)
+void
+box_process(struct port *port, struct request *request)
 {
 	struct txn *txn = txn_begin();
 
@@ -95,22 +89,12 @@ process_rw(struct port *port, struct request *request)
 	}
 }
 
-static void
-process_replica(struct port *port, struct request *request)
-{
-	if (!request_is_select(request->type)) {
-		tnt_raise(ClientError, ER_NONMASTER,
-			  cfg.replication_source);
-	}
-	return process_rw(port, request);
-}
-
-static void
-process_ro(struct port *port, struct request *request)
+void
+box_process_ro(struct port *port, struct request *request)
 {
 	if (!request_is_select(request->type))
 		tnt_raise(LoggedError, ER_SECONDARY);
-	return process_rw(port, request);
+	return box_process(port, request);
 }
 
 static void
@@ -138,12 +122,36 @@ on_request_next(struct request_trigger *trigger,
 }
 
 static void
-on_request_raw(struct request_trigger *trigger, struct request *request,
-	       struct txn *txn, struct port *port)
+on_request_local_trigger(struct request_trigger *trigger,
+			 struct request *request, struct txn *txn,
+			 struct port *port)
 {
 	(void) trigger;
 	request->execute(request, txn, port);
 }
+
+static void
+on_request_replica_trigger(struct request_trigger *trigger,
+			   struct request *request, struct txn *txn,
+			   struct port *port)
+{
+	if (!request_is_select(request->type)) {
+		tnt_raise(ClientError, ER_NONMASTER,
+			  cfg.replication_source);
+	}
+
+	on_request_next(trigger, request, txn, port);
+}
+
+static struct request_trigger on_request_local = {
+	{ &on_request_local.list, &on_request_local.list },    /* list */
+	on_request_local_trigger                               /* handler */
+};
+
+static struct request_trigger on_request_replica = {
+	{ &on_request_replica.list, &on_request_replica.list }, /* list */
+	on_request_replica_trigger                              /* handler */
+};
 
 static void
 recover_snap_row(const void *data)
@@ -202,7 +210,7 @@ recover_row(void *param __attribute__((unused)), const char *row, uint32_t rowle
 			uint16_t op = pick_u16(&row, end);
 			struct request request;
 			request_create(&request, op, row, end - row);
-			process_rw(&null_port, &request);
+			box_process(&null_port, &request);
 		} else {
 			say_error("unknown row tag: %i", (int)tag);
 			return -1;
@@ -218,8 +226,11 @@ recover_row(void *param __attribute__((unused)), const char *row, uint32_t rowle
 static void
 box_enter_master_or_replica_mode(struct tarantool_cfg *conf)
 {
+	rlist_del_entry(&on_request_local, list);
+	rlist_del_entry(&on_request_replica, list);
 	if (conf->replication_source != NULL) {
-		box_process = process_replica;
+		rlist_add_tail_entry(&executers, &on_request_replica, list);
+		rlist_add_tail_entry(&executers, &on_request_local, list);
 
 		recovery_wait_lsn(recovery_state, recovery_state->lsn);
 		recovery_follow_remote(recovery_state, conf->replication_source);
@@ -229,7 +240,7 @@ box_enter_master_or_replica_mode(struct tarantool_cfg *conf)
 		title("replica/%s%s", conf->replication_source,
 		      custom_proc_title);
 	} else {
-		box_process = process_rw;
+		rlist_add_tail_entry(&executers, &on_request_local, list);
 
 		memcached_start_expire();
 
@@ -347,11 +358,6 @@ box_free(void)
 {
 	space_free();
 }
-
-static struct request_trigger on_request_local = {
-	{ NULL, NULL }, /* list */
-	on_request_raw  /* handler */
-};
 
 void
 box_init(bool init_storage)
