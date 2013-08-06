@@ -120,6 +120,12 @@ lbox_request_index(struct lua_State *L)
 		lua_pushlstring(L, request->u.expr,
 				request->u.expr_end - request->u.expr);
 		lua_rawset(L, 1);
+	} else if (strcmp(key, "args") == 0 && request->type == CALL) {
+		const char *argspos = request->c.args;
+		lua_pushvalue(L, 2);
+		lbox_request_push_key(L, &argspos, request->c.args_end,
+					 request->c.arg_count);
+		lua_rawset(L, 1);
 	}
 
 	lua_pushvalue(L, 2);

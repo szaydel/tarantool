@@ -57,12 +57,14 @@ admin("box.select(0, 0, 1)")
 
 admin("ctx2 = box.set_on_request(function(ctx, req, next)"\
         "if req.type == 'CALL' and req.procname == 'ping' then"\
-        "    return 'pong!';"\
+        "    local res = req.args;"\
+        "    table.insert(res, 1, 'pong!')"\
+        "    return res;"\
         "else"\
         "    return next(req);"\
         "end;"\
     "end)")
-sql("CALL ping()")
+sql("CALL ping('12345', '456', '7', '8', '9')")
 admin("box.select(0, 0, 1)")
 admin("box.clear_on_request(ctx)")
 sql("CALL ping()")

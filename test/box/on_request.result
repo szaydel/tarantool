@@ -137,12 +137,12 @@ box.select(0, 0, 1)
 ---
  - 't[1] value is ': {2}
 ...
-ctx2 = box.set_on_request(function(ctx, req, next)if req.type == 'CALL' and req.procname == 'ping' then    return 'pong!';else    return next(req);end;end)
+ctx2 = box.set_on_request(function(ctx, req, next)if req.type == 'CALL' and req.procname == 'ping' then    local res = req.args;    table.insert(res, 1, 'pong!')    return res;else    return next(req);end;end)
 ---
 ...
-CALL ping()
+CALL ping('12345', '456', '7', '8', '9')
 Found 1 tuple:
-['pong!']
+['pong!', '12345', '456', '7', '8', '9']
 box.select(0, 0, 1)
 ---
  - 't[1] value is ': {2}
