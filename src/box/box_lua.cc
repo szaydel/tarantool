@@ -1167,8 +1167,8 @@ port_add_lua_multret(struct port *port, struct lua_State *L, uint32_t flags)
  * Signature:
  * box.process(op_code, request)
  */
-static int
-lbox_process(lua_State *L)
+static inline int
+lbox_process2(lua_State *L, bool raw)
 {
 	uint32_t op = lua_tointeger(L, 1); /* Get the first arg. */
 	size_t sz;
@@ -1189,7 +1189,11 @@ lbox_process(lua_State *L)
 	try {
 		struct request request;
 		request_create(&request, op, req, sz);
-		box_process(port_lua, &request);
+		if (raw) {
+			box_process_raw(port_lua, &request);
+		} else {
+			box_process(port_lua, &request);
+		}
 
 		/*
 		 * This only works as long as port_lua doesn't
@@ -1201,6 +1205,18 @@ lbox_process(lua_State *L)
 		throw;
 	}
 	return lua_gettop(L) - top;
+}
+
+static inline int
+lbox_process(lua_State *L)
+{
+	return lbox_process2(L, false);
+}
+
+static inline int
+lbox_process_raw(lua_State *L)
+{
+	return lbox_process2(L, true);
 }
 
 static int
@@ -1901,6 +1917,7 @@ lbox_clear_on_request(struct lua_State *L)
 
 static const struct luaL_reg boxlib[] = {
 	{"process", lbox_process},
+	{"process_raw", lbox_process_raw},
 	{"call_loadproc",  lbox_call_loadproc},
 	{"raise", lbox_raise},
 	{"pack", lbox_pack},

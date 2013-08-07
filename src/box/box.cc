@@ -69,14 +69,18 @@ static void
 on_request_trigger_run(struct request *request, struct txn *txn,
 		       struct port *port);
 
-void
-box_process(struct port *port, struct request *request)
+static inline void
+box_process2(struct port *port, struct request *request, bool raw)
 {
 	struct txn *txn = txn_begin();
 
 	try {
 		stat_collect(stat_base, request->type, 1);
-		on_request_trigger_run(request, txn, port);
+		if (raw) {
+			request->execute(request, txn, port);
+		} else {
+			on_request_trigger_run(request, txn, port);
+		}
 		txn_commit(txn);
 		struct tuple *tuple;
 		if (((tuple = txn->new_tuple) || (tuple = txn->old_tuple)) &&
@@ -88,6 +92,18 @@ box_process(struct port *port, struct request *request)
 		txn_rollback(txn);
 		throw;
 	}
+}
+
+void
+box_process(struct port *port, struct request *request)
+{
+	return box_process2(port, request, false);
+}
+
+void
+box_process_raw(struct port *port, struct request *request)
+{
+	return box_process2(port, request, true);
 }
 
 void
@@ -104,6 +120,7 @@ on_request_trigger_run(struct request *request, struct txn *txn,
 {
 	if (unlikely(rlist_empty(&on_request)))
 		return;
+
 
 	struct on_request_trigger *first = rlist_first_entry(
 		&on_request, struct on_request_trigger, list);
@@ -214,7 +231,7 @@ recover_row(void *param __attribute__((unused)), const char *row, uint32_t rowle
 			uint16_t op = pick_u16(&row, end);
 			struct request request;
 			request_create(&request, op, row, end - row);
-			box_process(&null_port, &request);
+			box_process_raw(&null_port, &request);
 		} else {
 			say_error("unknown row tag: %i", (int)tag);
 			return -1;

@@ -62,6 +62,9 @@ typedef void (*box_process_func)(struct port *port, struct request *request);
 /** For read-write operations. */
 void
 box_process(struct port *port, struct request *request);
+/** For read-write operations without execution on_request triggers. */
+void
+box_process_raw(struct port *port, struct request *request);
 /** For read-only port. */
 void
 box_process_ro(struct port *port, struct request *request);
