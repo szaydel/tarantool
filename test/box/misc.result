@@ -16,16 +16,14 @@ t = {} for n in pairs(box) do table.insert(t, tostring(n)) end table.sort(t)
 ...
 t
 ---
-- - _commit_trans
-  - _delete
+- - _delete
   - _insert
   - _replace
-  - _rollback_trans
-  - _start_trans
   - _update
   - call_loadproc
   - cfg
   - cjson
+  - commit_trans
   - coredump
   - counter
   - dostring
@@ -39,12 +37,14 @@ t
   - pack
   - process
   - raise
+  - rollback_trans
   - schema
   - session
   - slab
   - snapshot
   - socket
   - space
+  - start_trans
   - stat
   - time
   - time64

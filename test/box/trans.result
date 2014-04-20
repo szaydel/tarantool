@@ -45,3 +45,6 @@ space:rollback_trans()
 ---
 - error: No active transaction
 ...
+space:drop()
+---
+...

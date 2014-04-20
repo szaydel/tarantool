@@ -23,3 +23,5 @@ space:select{100}
 space:start_trans()
 space:update({100}, {{'+', 1, 100}})
 space:rollback_trans()
+
+space:drop()

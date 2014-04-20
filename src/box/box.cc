@@ -96,7 +96,7 @@ box_commit_trans(struct txn * txn, struct port * port)
 }
 
 void
-box_post_execute(struct request *request, struct txn * txn, struct port * port)
+box_end_request(struct request *request, struct txn * txn, struct port * port)
 {
         if (iproto_request_is_update(request->code)) { 
                 port_send_tuple(port, txn);
@@ -118,7 +118,7 @@ process_rw(struct port *port, struct request *request)
                 stat_collect(stat_base, request->code, 1);
                 request->execute(request, txn, port);
 
-                box_post_execute(request, txn, port);
+                box_end_request(request, txn, port);
 
                 if (autocommit && current_multistatement_transaction == NULL) { 
                         box_commit_trans(txn, port);
