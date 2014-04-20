@@ -49,6 +49,9 @@ struct txn_request {
 	struct iproto_packet *packet;
 };
 
+/* pointer to the current multithreaded transaction (if any) */
+#define txn_current() (fiber()->session->txn)
+
 struct txn {
         txn_request req;
         txn_request* tail; /* tail fo L1-list of transaction requests */

@@ -597,12 +597,13 @@ main(int argc, char **argv)
 	fiber_init();
 	coeio_init();
 	signal_init();
-	session_init();
 	tarantool_lua_init();
+	session_init();
 
 	bool start_loop = false;
 	try {
-		int events = ev_activecnt(loop());
+		SessionGuard session_guard(-1, 0);
+                int events = ev_activecnt(loop());
 		/*
 		 * Load user init script.  The script should have access
 		 * to Tarantool Lua API (box.cfg, box.fiber, etc...) that

@@ -33,7 +33,7 @@ box.fiber.resume(f)
 ...
 failed
 ---
-- false
+- true
 ...
 f1 = box.fiber.create(function() if box.session.id() == 0 then failed = true end end)
 ---
@@ -44,7 +44,7 @@ box.fiber.resume(f1)
 ...
 failed
 ---
-- false
+- true
 ...
 box.session.peer() == box.session.peer(box.session.id())
 ---

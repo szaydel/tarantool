@@ -56,6 +56,7 @@ extern "C" {
 #include "lua/cjson.h"
 #include "lua/yaml.h"
 #include "lua/msgpack.h"
+#include <session.h>
 
 #include <ctype.h>
 #include "small/region.h"
@@ -461,6 +462,7 @@ run_script(va_list ap)
 {
 	struct lua_State *L = va_arg(ap, struct lua_State *);
 	const char *path = va_arg(ap, const char *);
+        SessionGuard session_guard(-1, 0);
 
 	/*
 	 * Return control to tarantool_lua_run_script.

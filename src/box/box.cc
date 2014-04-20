@@ -61,7 +61,6 @@ box_process_func box_process = process_ro;
 
 static int stat_base;
 int snapshot_pid = 0; /* snapshot processes pid */
-struct txn * current_multistatement_transaction; 
 
 static void
 box_snapshot_cb(struct log_io *l);
@@ -108,7 +107,7 @@ struct txn * current_multistatement_trasnaction;
 static void
 process_rw(struct port *port, struct request *request)
 {
-        struct txn *txn = current_multistatement_transaction;
+        struct txn *txn = txn_current();
         bool autocommit = false;
         if (txn == NULL) { 
                 txn = txn_begin();
@@ -120,11 +119,11 @@ process_rw(struct port *port, struct request *request)
 
                 box_end_request(request, txn, port);
 
-                if (autocommit && current_multistatement_transaction == NULL) { 
+                if (autocommit && txn_current() == NULL) { 
                         box_commit_trans(txn, port);
                 }
 	} catch (Exception *e) {
-                current_multistatement_transaction = NULL;
+                txn_current() = NULL;
 		txn_rollback(txn);
 		throw;
 	}
@@ -398,6 +397,7 @@ box_init()
 
 	stat_base = stat_register(iproto_request_type_strs,
 				  IPROTO_DML_REQUEST_MAX);
+        SessionGuard session_guard(-1, 0);
 
 	recover_snap(recovery_state, cfg_gets("replication_source"));
 	space_end_recover_snapshot();

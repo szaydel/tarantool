@@ -60,7 +60,8 @@ session_create(int fd, uint64_t cookie)
 	session->id = sid_max();
 	session->fd =  fd;
 	session->cookie = cookie;
-	/*
+	session->txn = NULL;
+        /*
 	 * At first the session user is a superuser,
 	 * to make sure triggers run correctly.
 	 */
@@ -105,6 +106,7 @@ session_destroy(struct session *session)
 		/* catch all. */
 	}
 	session_storage_cleanup(session->id);
+	assert(session->txn == NULL);
 	struct mh_i32ptr_node_t node = { session->id, NULL };
 	mh_i32ptr_remove(session_registry, &node, NULL);
 	mempool_free(&session_pool, session);
@@ -136,3 +138,14 @@ session_free()
 	if (session_registry)
 		mh_i32ptr_delete(session_registry);
 }
+
+SessionGuard::SessionGuard(int fd, uint64_t cookie)
+{
+	session_set_user(session_create(fd, cookie), ADMIN, ADMIN);
+}
+
+SessionGuard::~SessionGuard()
+{
+	session_destroy(fiber()->session);
+}
+

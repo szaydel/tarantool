@@ -43,6 +43,7 @@
 #include "iproto_constants.h"
 #include "msgpuck/msgpuck.h"
 #include "replica.h"
+#include "session.h"
 
 static void
 remote_apply_row(struct recovery_state *r, struct iproto_packet *packet);
@@ -200,6 +201,7 @@ pull_from_remote(va_list ap)
 	bool warning_said = false;
 	const int reconnect_delay = 1;
 	ev_loop *loop = loop();
+        SessionGuard session_guard(-1, 0);
 
 	coio_init(&coio);
 

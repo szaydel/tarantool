@@ -27,6 +27,7 @@
  * SUCH DAMAGE.
  */
 #include "txn.h"
+#include "session.h"
 #include "box.h"
 #include "tuple.h"
 #include "space.h"
@@ -43,7 +44,7 @@ static txn_request* new_txn_request(struct txn *txn)
         txn_request* tr;
         txn->n_requests += 1;
         if (multistatement_transaction_limit != 0 && txn->n_requests > multistatement_transaction_limit) { 
-                current_multistatement_transaction = NULL;
+                txn_current() = NULL;
 		tnt_raise(LoggedError, ER_TRANSACTION_TOO_LONG, multistatement_transaction_limit);
         } 
         if (txn->tail == NULL) { 

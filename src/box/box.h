@@ -69,8 +69,6 @@ extern int snapshot_pid;
 /** Incremented with each next snapshot. */
 extern uint32_t snapshot_version;
 
-extern struct txn * current_multistatement_transaction; 
-
 /**
  * Iterate over all spaces and save them to the
  * snapshot file.
