@@ -60,6 +60,10 @@ fiber_call(struct fiber *callee, ...)
 	assert(cord->sp + 1 - cord->stack < FIBER_CALL_STACK);
 	assert(caller);
 
+    if (caller->on_reschedule_callback) { 
+        caller->on_reschedule_callback();
+    }
+
 	cord->fiber = callee;
 	*cord->sp++ = caller;
 
@@ -200,6 +204,10 @@ fiber_yield(void)
 	struct cord *cord = cord();
 	struct fiber *callee = *(--cord->sp);
 	struct fiber *caller = cord->fiber;
+
+    if (caller->on_reschedule_callback) { 
+        caller->on_reschedule_callback();
+    }
 
 	cord->fiber = callee;
 	update_last_stack_frame(caller);

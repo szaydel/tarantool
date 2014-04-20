@@ -61,6 +61,7 @@ box_process_func box_process = process_ro;
 
 static int stat_base;
 int snapshot_pid = 0; /* snapshot processes pid */
+struct txn * current_multistatement_transaction; 
 
 static void
 box_snapshot_cb(struct log_io *l);
@@ -77,24 +78,46 @@ struct request_replace_body {
 void
 port_send_tuple(struct port *port, struct txn *txn)
 {
-	struct tuple *tuple;
-	if ((tuple = txn->new_tuple) || (tuple = txn->old_tuple))
-		port_add_tuple(port, tuple);
+    if (txn->tail != NULL) { 
+        txn_request* tr = &txn->req; 
+        do { 
+            struct tuple *tuple;
+            if ((tuple = tr->new_tuple) || (tuple = tr->old_tuple)) { 
+                port_add_tuple(port, tuple);
+            }
+        } while ((tr = tr->next) != NULL);
+    }
 }
+
+void
+box_commit_trans(struct txn * txn, struct port * port)
+{
+    txn_commit(txn);
+    port_send_tuple(port, txn);
+    port_eof(port);
+    txn_finish(txn);
+}
+
+struct txn * current_multistatement_trasnaction; 
 
 static void
 process_rw(struct port *port, struct request *request)
 {
-	struct txn *txn = txn_begin();
-
+    struct txn *txn = current_multistatement_transaction;
+    bool autocommit = false;
+    if (txn == NULL) { 
+        txn = txn_begin();
+        autocommit = true;
+    }
 	try {
 		stat_collect(stat_base, request->code, 1);
-		request->execute(request, txn, port);
-		txn_commit(txn);
-		port_send_tuple(port, txn);
-		port_eof(port);
-		txn_finish(txn);
+        request->execute(request, txn, port);
+            
+        if (autocommit && current_multistatement_transaction == NULL) { 
+            box_commit_trans(txn, port);
+        }
 	} catch (Exception *e) {
+        current_multistatement_transaction = NULL;
 		txn_rollback(txn);
 		throw;
 	}
@@ -122,16 +145,32 @@ static int
 recover_row(void *param __attribute__((unused)),
 	    struct iproto_packet *packet)
 {
+    struct request request;
 	try {
 		assert(packet->bodycnt == 1); /* always 1 for read */
-		struct request request;
+        if ((packet->flags & (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_HAS_NEXT)) == (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_HAS_NEXT)) { 
+            request_create(&request, IPROTO_START_TRANS);            
+            process_rw(&null_port, &request);
+        }
 		request_create(&request, packet->code);
 		request_decode(&request, (const char *) packet->body[0].iov_base,
 				packet->body[0].iov_len);
 		request.packet = packet;
 		process_rw(&null_port, &request);
+        if ((packet->flags & (WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT)) == WAL_REQ_FLAG_IN_TRANS) { 
+            request_create(&request, IPROTO_COMMIT_TRANS);            
+            process_rw(&null_port, &request);
+        }
 	} catch (Exception *e) {
 		e->log();
+        if (packet->flags & WAL_REQ_FLAG_IN_TRANS) { 
+            try { 
+                request_create(&request, IPROTO_ROLLBACK_TRANS);            
+                process_rw(&null_port, &request);
+            } catch (Exception *x) {
+                x->log();
+            }
+        }
 		return -1;
 	}
 
@@ -276,6 +315,12 @@ box_set_too_long_threshold(double threshold)
 	too_long_threshold = threshold;
 }
 
+extern "C" void
+box_set_transaction_limit(int limit)
+{
+	multistatement_transaction_limit = limit;
+}
+
 /* }}} configuration bindings */
 
 void
@@ -389,6 +434,7 @@ box_init()
 					   cfg_getd("io_collect_interval"));
 	}
 	too_long_threshold = cfg_getd("too_long_threshold");
+	multistatement_transaction_limit = cfg_geti("transaction_limit");
 }
 
 static void

@@ -2,6 +2,10 @@ box.cfg.wal_mode
 ---
 - none
 ...
+os.remove('00000000000000000001.snap');
+---
+- true
+...
 space = box.schema.create_space('tweedledum')
 ---
 ...
@@ -48,7 +52,7 @@ space:truncate()
 ...
 box.snapshot()
 ---
-- ok
+- error: can't save snapshot, errno 17 (File exists)
 ...
 space:drop()
 ---

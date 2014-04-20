@@ -1,4 +1,5 @@
 box.cfg.wal_mode
+os.remove('00000000000000000001.snap');
 space = box.schema.create_space('tweedledum')
 space:create_index('primary', { type = 'hash' })
 space:insert{1}

@@ -17,17 +17,29 @@ box.stat()
 - DELETE:
     total: 0
     rps: 0
-  SELECT:
-    total: 1
-    rps: 0
-  REPLACE:
+  START_TRANS:
     total: 0
     rps: 0
   INSERT:
     total: 12
     rps: 2
+  ROLLBACK_TRANS:
+    total: 0
+    rps: 0
   CALL:
     total: 0
+    rps: 0
+  COMMIT_TRANS:
+    total: 0
+    rps: 0
+  REPLACE:
+    total: 0
+    rps: 0
+  AUTH:
+    total: 0
+    rps: 0
+  SELECT:
+    total: 1
     rps: 0
   UPDATE:
     total: 0
@@ -41,16 +53,28 @@ box.stat()
 - DELETE:
     total: 0
     rps: 0
-  SELECT:
-    total: 0
-    rps: 0
-  REPLACE:
+  START_TRANS:
     total: 0
     rps: 0
   INSERT:
     total: 0
     rps: 0
+  ROLLBACK_TRANS:
+    total: 0
+    rps: 0
   CALL:
+    total: 0
+    rps: 0
+  COMMIT_TRANS:
+    total: 0
+    rps: 0
+  REPLACE:
+    total: 0
+    rps: 0
+  AUTH:
+    total: 0
+    rps: 0
+  SELECT:
     total: 0
     rps: 0
   UPDATE:

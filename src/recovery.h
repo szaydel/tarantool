@@ -69,6 +69,8 @@ struct remote;
 
 enum wal_mode { WAL_NONE = 0, WAL_WRITE, WAL_FSYNC, WAL_FSYNC_DELAY, WAL_MODE_MAX };
 
+enum wal_req_flags { WAL_REQ_FLAG_IS_FIRST = 1, WAL_REQ_FLAG_HAS_NEXT = 2, WAL_REQ_FLAG_IN_TRANS = 4 };
+
 /** String constants for the supported modes. */
 extern const char *wal_mode_STRS[];
 
@@ -117,6 +119,7 @@ void recovery_finalize(struct recovery_state *r);
 
 int
 recover_wal(struct recovery_state *r, struct log_io *l); /* for replication */
+
 int wal_write(struct recovery_state *r, struct iproto_packet *packet);
 
 void recovery_setup_panic(struct recovery_state *r, bool on_snap_error, bool on_wal_error);

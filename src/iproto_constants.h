@@ -102,7 +102,10 @@ enum iproto_request_type {
 	IPROTO_DELETE = 5,
 	IPROTO_CALL = 6,
 	IPROTO_AUTH = 7,
-	IPROTO_DML_REQUEST_MAX = 8,
+    IPROTO_START_TRANS = 8,
+    IPROTO_COMMIT_TRANS = 9,
+    IPROTO_ROLLBACK_TRANS = 10,
+	IPROTO_DML_REQUEST_MAX = 11,
 	IPROTO_PING = 64,
 	IPROTO_SUBSCRIBE = 66
 };
@@ -138,11 +141,12 @@ enum {
 
 struct iproto_packet {
 	uint32_t code;
+	uint32_t flags;
 	uint64_t sync;
 	uint64_t lsn;
-	double tm;
+	double   tm;
+	int      bodycnt;
 
-	int bodycnt;
 	struct iovec body[IPROTO_PACKET_BODY_IOVMAX];
 };
 

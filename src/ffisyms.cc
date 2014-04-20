@@ -38,4 +38,5 @@ void *ffi_symbols[] = {
 	(void *) box_set_io_collect_interval,
 	(void *) box_set_snap_io_rate_limit,
 	(void *) box_set_too_long_threshold,
+	(void *) box_set_transaction_limit,
 };

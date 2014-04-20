@@ -166,7 +166,6 @@ replica_bootstrap(struct recovery_state *r, const char *replication_source)
 			say_info("done");
 			break;
 		}
-
 		remote_apply_row(r, &packet);
 	}
 	/* master socket closed by guard */

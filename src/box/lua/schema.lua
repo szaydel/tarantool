@@ -451,6 +451,15 @@ function box.schema.space.bless(space)
     space_mt.insert = function(space, tuple)
         return box._insert(space.n, tuple);
     end
+    space_mt.start_trans = function(space)
+        return box._start_trans(space.n);
+    end
+    space_mt.commit_trans = function(space)
+        return box._commit_trans(space.n);
+    end
+    space_mt.rollback_trans = function(space)
+        return box._rollback_trans(space.n);
+    end
     space_mt.replace = function(space, tuple)
         return box._replace(space.n, tuple);
     end

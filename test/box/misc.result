@@ -16,9 +16,12 @@ t = {} for n in pairs(box) do table.insert(t, tostring(n)) end table.sort(t)
 ...
 t
 ---
-- - _delete
+- - _commit_trans
+  - _delete
   - _insert
   - _replace
+  - _rollback_trans
+  - _start_trans
   - _update
   - call_loadproc
   - cfg
@@ -114,10 +117,14 @@ end;
 t;
 ---
 - - DELETE
-  - SELECT
-  - REPLACE
+  - START_TRANS
   - INSERT
+  - ROLLBACK_TRANS
   - CALL
+  - COMMIT_TRANS
+  - REPLACE
+  - AUTH
+  - SELECT
   - UPDATE
   - total
   - rps
@@ -195,7 +202,10 @@ t;
 - - 'box.error.ER_CREATE_FUNCTION : 50'
   - 'box.error.ER_NO_SUCH_INDEX : 35'
   - 'box.error.ER_TUPLE_FOUND : 3'
+  - 'box.error.ER_ACCESS_DENIED : 42'
   - 'box.error.ER_CREATE_SPACE : 9'
+  - 'box.error.ER_NO_ACTIVE_TRANSACTION : 61'
+  - 'box.error.ER_LAST_DROP : 15'
   - 'box.error.ER_TUPLE_FORMAT_LIMIT : 16'
   - 'box.error.ER_FIELD_TYPE : 23'
   - 'box.error.ER_CFG : 59'
@@ -232,8 +242,8 @@ t;
   - 'box.error.ER_SECONDARY : 7'
   - 'box.error.ER_FUNCTION_EXISTS : 52'
   - 'box.error.ER_CREATE_USER : 43'
-  - 'box.error.ER_ACCESS_DENIED : 42'
-  - 'box.error.ER_LAST_DROP : 15'
+  - 'box.error.ER_YIELD_NOT_ALLOWED : 62'
+  - 'box.error.ER_TRANSACTION_TOO_LONG : 60'
   - 'box.error.ER_UPDATE_FIELD : 29'
   - 'box.error.ER_FIBER_STACK : 30'
   - 'box.error.ER_UNKNOWN_UPDATE_OP : 28'

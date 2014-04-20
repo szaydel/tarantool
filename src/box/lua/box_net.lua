@@ -80,6 +80,9 @@ box.net = {
         UPDATE = 4,
         DELETE = 5,
         CALL = 6,
+        START_TRANS = 8,
+        COMMIT_TRANS = 9,   
+        ROLLBACK_TRANS = 10,
 
         CODE = 0x00,
         SYNC = 0x01,
@@ -203,6 +206,18 @@ box.net = {
                     [box.net.box.LIMIT] = limit
                 }))
             return result
+        end,
+
+        start_trans = function(self)
+            return self:process(box.net.box.START_TRANS, '')
+        end,
+
+        commit_trans = function(self)
+            return self:process(box.net.box.COMMIT_TRANS, '')
+        end,
+
+        rollback_trans = function(self)
+            return self:process(box.net.box.ROLLBACK_TRANS, '')
         end,
 
         ping = function(self)

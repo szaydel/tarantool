@@ -27,6 +27,7 @@
  * SUCH DAMAGE.
  */
 #include "request.h"
+#include "box.h"
 #include "txn.h"
 #include "tuple.h"
 #include "index.h"
@@ -221,6 +222,54 @@ execute_auth(struct request *request, struct txn * /* txn */,
 	authenticate(user, len, request->tuple, request->tuple_end);
 }
 
+static void on_fiber_reschedule()
+{
+    struct txn * txn = current_multistatement_transaction;
+    if (txn != NULL) { 
+		//tnt_raise(LoggedError, ER_YIELD_NOT_ALLOWED);        
+        current_multistatement_transaction = NULL;
+        txn_rollback(txn);
+    }
+}
+
+
+void 
+execute_start_trans(struct request * /*request */, struct txn * txn,
+                    struct port * /* port */)
+{
+    if (current_multistatement_transaction != NULL) { 
+        current_multistatement_transaction->nesting_level += 1;
+    } else {
+        assert(txn->nesting_level == 1);
+        fiber()->on_reschedule_callback = on_fiber_reschedule;
+    }
+    current_multistatement_transaction = txn;
+}
+
+void 
+execute_rollback_trans(struct request * /*request*/, struct txn * txn,
+                    struct port * /* port */)
+{
+    if (current_multistatement_transaction == NULL) { 
+		tnt_raise(LoggedError, ER_NO_ACTIVE_TRANSACTION);
+    }
+    current_multistatement_transaction = NULL;
+    txn_rollback(txn);
+}
+
+void 
+execute_commit_trans(struct request * /* request */, struct txn * txn,
+                    struct port * port)
+{
+    if (current_multistatement_transaction == NULL) { 
+		tnt_raise(LoggedError, ER_NO_ACTIVE_TRANSACTION);
+    }
+    if (--current_multistatement_transaction->nesting_level == 0)  { 
+        current_multistatement_transaction = NULL;
+        box_commit_trans(txn, port);
+    }
+}
+
 /** }}} */
 
 void
@@ -237,7 +286,7 @@ request_create(struct request *request, uint32_t code)
 	static const request_execute_f execute_map[] = {
 		NULL, execute_select, execute_replace, execute_replace,
 		execute_update, execute_delete, box_lua_call,
-		execute_auth,
+		execute_auth, execute_start_trans, execute_commit_trans, execute_rollback_trans, 
 	};
 	memset(request, 0, sizeof(*request));
 	request->execute = execute_map[code];

@@ -1,5 +1,5 @@
-#ifndef TARANTOOL_BOX_TXN_H_INCLUDED
-#define TARANTOOL_BOX_TXN_H_INCLUDED
+#ifndef TARANTOOL_BOX_RTREE_INDEX_H_INCLUDED
+#define TARANTOOL_BOX_RTREE_INDEX_H_INCLUDED
 /*
  * Redistribution and use in source and binary forms, with or
  * without modification, are permitted provided that the following
@@ -28,42 +28,30 @@
  * THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+
 #include "index.h"
-#include "trigger.h"
 
-extern double too_long_threshold;
-extern int multistatement_transaction_limit;
-struct tuple;
-struct space;
+#include <third_party/rtree.h>
 
-struct txn_request {
-    /* L1-list of requests for multistatement transaction */
-    txn_request* next; 
+class RTreeIndex: public Index {
+  public:
+	RTreeIndex(struct key_def *key_def);
 
-	/* Undo info. */
-	struct space *space;
-	struct tuple *old_tuple;
-	struct tuple *new_tuple;
+	virtual void beginBuild();
+	virtual size_t size() const;
+	virtual struct tuple *findByKey(const char *key, uint32_t part_count) const;
+	virtual struct tuple *replace(struct tuple *old_tuple,
+                                  struct tuple *new_tuple,
+                                  enum dup_replace_mode mode);
+    
+	virtual size_t memsize() const;
+	virtual struct iterator *allocIterator() const;
+	virtual void initIterator(struct iterator *iterator,
+                              enum iterator_type type,
+                              const char *key, uint32_t part_count) const;
 
-	/* Redo info: list of binary packets */
-	struct iproto_packet *packet;
+  protected:
+	R_tree tree;
 };
 
-struct txn {
-    txn_request req;
-    txn_request* tail; /* tail fo L1-list of transaction requests */
-    int nesting_level;
-    int n_requests;
-	struct rlist on_commit;
-	struct rlist on_rollback;
-};
-
-struct txn *txn_begin();
-void txn_commit(struct txn *txn);
-void txn_finish(struct txn *txn);
-void txn_rollback(struct txn *txn);
-void txn_replace(struct txn *txn, struct space *space,
-		 struct tuple *old_tuple, struct tuple *new_tuple,
-		 enum dup_replace_mode mode);
-void txn_add_redo(struct txn *txn, struct request *request);
-#endif /* TARANTOOL_BOX_TXN_H_INCLUDED */
+#endif /* TARANTOOL_BOX_RTREE_INDEX_H_INCLUDED */

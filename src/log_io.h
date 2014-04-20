@@ -114,7 +114,7 @@ void
 log_io_cursor_close(struct log_io_cursor *i);
 
 int
-log_io_cursor_next(struct log_io_cursor *i, struct iproto_packet *packet);
+log_io_cursor_next(struct log_io_cursor *i, struct iproto_packet *packet, bool subsequent);
 int
 xlog_encode_row(const struct iproto_packet *packet, struct iovec *iov,
 		char fixheader[XLOG_FIXHEADER_SIZE]);

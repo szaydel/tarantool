@@ -9,6 +9,7 @@ void box_set_replication_source(const char *source);
 void box_set_log_level(int level);
 void box_set_io_collect_interval(double interval);
 void box_set_too_long_threshold(double threshold);
+void box_set_transaction_limit(int limit);
 void box_set_snap_io_rate_limit(double limit);
 ]])
 
@@ -30,6 +31,7 @@ local default_cfg = {
     readahead           = 16320,
     snap_io_rate_limit  = nil,
     too_long_threshold  = 0.5,
+    transaction_limit   = 0,
     wal_mode            = "write",
     rows_per_wal        = 500000,
     wal_dir_rescan_delay= 0.1,
@@ -51,6 +53,7 @@ local dynamic_cfg = {
     log_level               = ffi.C.box_set_log_level,
     io_collect_interval     = ffi.C.box_set_io_collect_interval,
     too_long_threshold      = ffi.C.box_set_too_long_threshold,
+    transaction_limit       = ffi.C.box_set_transaction_limit,
     snap_io_rate_limit      = ffi.C.box_set_snap_io_rate_limit,
 }
 

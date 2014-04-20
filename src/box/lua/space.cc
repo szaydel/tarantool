@@ -54,10 +54,10 @@ lbox_space_on_replace_trigger(struct trigger *trigger, void *event)
 
 	lua_rawgeti(L, LUA_REGISTRYINDEX, (intptr_t) trigger->data);
 
-	lbox_pushtuple(L, txn->old_tuple);
-	lbox_pushtuple(L, txn->new_tuple);
+	lbox_pushtuple(L, txn->tail->old_tuple);
+	lbox_pushtuple(L, txn->tail->new_tuple);
 	/* @todo: maybe the space object has to be here */
-	lua_pushstring(L, txn->space->def.name);
+	lua_pushstring(L, txn->tail->space->def.name);
 
 	lbox_call(L, 3, 0);
 }

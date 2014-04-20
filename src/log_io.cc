@@ -248,6 +248,7 @@ error:
 	uint32_t crc32c = mp_decode_uint(&data);
 	assert(data <= fixheader + sizeof(fixheader));
 	(void) crc32p;
+    packet->flags = *data;
 
 	/* Allocate memory for body */
 	char *bodybuf = (char *) region_alloc(&fiber()->gc, len);
@@ -268,7 +269,7 @@ error:
 
 int
 xlog_encode_row(const struct iproto_packet *packet, struct iovec *iov,
-		char fixheader[XLOG_FIXHEADER_SIZE])
+                char fixheader[XLOG_FIXHEADER_SIZE])
 {
 	int iovcnt = iproto_packet_encode(packet, iov + 1) + 1;
 	uint32_t len = 0;
@@ -288,6 +289,7 @@ xlog_encode_row(const struct iproto_packet *packet, struct iovec *iov,
 	data = mp_encode_uint(data, crc32p);
 	/* Encode crc32 for current row */
 	data = mp_encode_uint(data, crc32c);
+    *data++ = (char)packet->flags;
 	/* Encode padding */
 	ssize_t padding = XLOG_FIXHEADER_SIZE - (data - fixheader);
 	if (padding > 0)
@@ -334,7 +336,7 @@ log_io_cursor_close(struct log_io_cursor *i)
  *
  */
 int
-log_io_cursor_next(struct log_io_cursor *i, struct iproto_packet *packet)
+log_io_cursor_next(struct log_io_cursor *i, struct iproto_packet *packet, bool subsequent)
 {
 	struct log_io *l = i->log;
 	log_magic_t magic;
@@ -361,7 +363,10 @@ restart:
 	if (fread(&magic, sizeof(magic), 1, l->f) != 1)
 		goto eof;
 
-	while (magic != row_marker) {
+    while (magic != row_marker) {
+        if (subsequent) { 	
+            return 1;
+        }
 		int c = fgetc(l->f);
 		if (c == EOF) {
 			say_debug("eof while looking for magic");
@@ -371,10 +376,14 @@ restart:
 			((log_magic_t) c & 0xff) << (sizeof(magic)*8 - 8);
 	}
 	marker_offset = ftello(l->f) - sizeof(row_marker);
-	if (i->good_offset != marker_offset)
+	if (i->good_offset != marker_offset) { 
+        if (subsequent) { 	
+            return 1;
+        }
 		say_warn("skipped %jd bytes after 0x%08jx offset",
 			(intmax_t)(marker_offset - i->good_offset),
 			(uintmax_t)i->good_offset);
+    }
 	say_debug("magic found at 0x%08jx", (uintmax_t)marker_offset);
 
 	try {
@@ -384,6 +393,9 @@ restart:
 		if (l->dir->panic_if_error)
 			panic("failed to read row");
 		say_warn("failed to read row");
+        if (subsequent) { 
+            return 1;
+        }
 		goto restart;
 	}
 

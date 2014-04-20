@@ -1,5 +1,7 @@
 #!/bin/sh
 
+export PYTHONPATH=/usr/lib/python2.7/dist-packages/yaml:/usr/lib/python2.7/
+
 /usr/bin/env python2 <<__EOB__
 import sys
 if sys.hexversion < 0x02060000 or sys.hexversion >= 0x03000000:
