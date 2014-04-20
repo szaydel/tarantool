@@ -36,43 +36,43 @@
 
 inline coord_t extract_coord(struct tuple const* tuple, int field_no) 
 {
-    const char* field = tuple_field(tuple, field_no);
-    return (coord_t)mp_decode_uint(&field);
+        const char* field = tuple_field(tuple, field_no);
+        return (coord_t)mp_decode_uint(&field);
 }
 
 inline void extract_rectangle(rectangle_t& r, struct tuple const* tuple, struct key_def* kd) 
 {
-    switch (kd->part_count) { 
-      case 2: // point
-        r.boundary[0] = r.boundary[2] = extract_coord(tuple, kd->parts[0].fieldno);
-        r.boundary[1] = r.boundary[3] = extract_coord(tuple, kd->parts[1].fieldno);
-        break;
-      case 4: // rectangle
-        for (int i = 0; i < 4; i++) { 
-            r.boundary[i] = extract_coord(tuple, kd->parts[i].fieldno);
+        switch (kd->part_count) { 
+        case 2: // point
+                r.boundary[0] = r.boundary[2] = extract_coord(tuple, kd->parts[0].fieldno);
+                r.boundary[1] = r.boundary[3] = extract_coord(tuple, kd->parts[1].fieldno);
+                break;
+        case 4: // rectangle
+                for (int i = 0; i < 4; i++) { 
+                        r.boundary[i] = extract_coord(tuple, kd->parts[i].fieldno);
+                }
+                break;
+        default:
+                assert(false);
         }
-        break;
-      default:
-        assert(false);
-    }
 }
 /* {{{ TreeIndex Iterators ****************************************/
 
 struct rtree_iterator {
-    struct iterator base;
-    R_tree_iterator impl;
+        struct iterator base;
+        R_tree_iterator impl;
 };
 
 static void
 rtree_iterator_free(struct iterator *i)
 {
-    delete (rtree_iterator*)i;
+        delete (rtree_iterator*)i;
 }
 
 static struct tuple *
 rtree_iterator_next(struct iterator *i)
 {
-    return (tuple*)((rtree_iterator*)i)->impl.next();
+        return (tuple*)((rtree_iterator*)i)->impl.next();
 }
 
 /* }}} */
@@ -82,16 +82,16 @@ rtree_iterator_next(struct iterator *i)
 RTreeIndex::RTreeIndex(struct key_def *key_def)
 	: Index(key_def)
 {
-    if (key_def->part_count != 2 && key_def->part_count != 4) { 
-        tnt_raise(ClientError, ER_UNSUPPORTED,
-				  "R-Tree index can be defied only for points (two parts) or rectangles (four parts)");
-    }
-    for (int i = 0; i < key_def->part_count; i++) { 
-        if (key_def->parts[i].type != NUM) { 
-            tnt_raise(ClientError, ER_UNSUPPORTED,
-                      "R-Tree index can be defied only for numeric fields");
+        if (key_def->part_count != 2 && key_def->part_count != 4) { 
+                tnt_raise(ClientError, ER_UNSUPPORTED,
+                          "R-Tree index can be defied only for points (two parts) or rectangles (four parts)");
         }
-    }    
+        for (int i = 0; i < key_def->part_count; i++) { 
+                if (key_def->parts[i].type != NUM) { 
+                        tnt_raise(ClientError, ER_UNSUPPORTED,
+                                  "R-Tree index can be defied only for numeric fields");
+                }
+        }    
 }
 
 size_t
@@ -103,50 +103,50 @@ RTreeIndex::size() const
 size_t
 RTreeIndex::memsize() const
 {
-    return tree.size() * (sizeof(rectangle_t) + sizeof(struct tuple *)) * 2; // multiply on two because up to half of tree pages are not used 
+        return tree.size() * (sizeof(rectangle_t) + sizeof(struct tuple *)) * 2; // multiply on two because up to half of tree pages are not used 
 }
 
 struct tuple *
 RTreeIndex::findByKey(const char *key, uint32_t part_count) const
 {
-    rectangle_t r;
-    R_tree_iterator iterator;
-    switch (part_count) { 
-      case 2:
-        r.boundary[0] = r.boundary[2] = mp_decode_uint(&key);
-        r.boundary[1] = r.boundary[3] = mp_decode_uint(&key);
-        break;
-      case 4:
-        for (int i = 0; i < 4; i++) { 
-            r.boundary[i] = mp_decode_uint(&key);
+        rectangle_t r;
+        R_tree_iterator iterator;
+        switch (part_count) { 
+        case 2:
+                r.boundary[0] = r.boundary[2] = mp_decode_uint(&key);
+                r.boundary[1] = r.boundary[3] = mp_decode_uint(&key);
+                break;
+        case 4:
+                for (int i = 0; i < 4; i++) { 
+                        r.boundary[i] = mp_decode_uint(&key);
+                }
+                break;
+        default:
+                tnt_raise(ClientError, ER_UNSUPPORTED,
+                          "R-Tree key should be point (two integer coordinates) or rectangles (four integer coordinates)");
         }
-        break;
-      default:
-        tnt_raise(ClientError, ER_UNSUPPORTED,
-				  "R-Tree key should be point (two integer coordinates) or rectangles (four integer coordinates)");
-    }
-    if (tree.search(r, SOP_OVERLAPS, iterator)) {
-        return (struct tuple*)iterator.next();
-    }
-    return NULL;
+        if (tree.search(r, SOP_OVERLAPS, iterator)) {
+                return (struct tuple*)iterator.next();
+        }
+        return NULL;
 }    
 
 struct tuple *
 RTreeIndex::replace(struct tuple *old_tuple, struct tuple *new_tuple,
                     enum dup_replace_mode)
 {
-    rectangle_t r;
-	if (new_tuple) {
-        extract_rectangle(r, new_tuple, key_def);
-        tree.insert(r, new_tuple);
-    }
-	if (old_tuple) {
-        extract_rectangle(r, old_tuple, key_def);
-        if (!tree.remove(r, old_tuple)) { 
-            old_tuple = NULL;
+        rectangle_t r;
+        if (new_tuple) {
+                extract_rectangle(r, new_tuple, key_def);
+                tree.insert(r, new_tuple);
         }
-    }
-    return old_tuple;
+	if (old_tuple) {
+                extract_rectangle(r, old_tuple, key_def);
+                if (!tree.remove(r, old_tuple)) { 
+                        old_tuple = NULL;
+                }
+        }
+        return old_tuple;
 }
 
 struct iterator *
@@ -167,61 +167,61 @@ void
 RTreeIndex::initIterator(struct iterator *iterator, enum iterator_type type,
                          const char *key, uint32_t part_count) const
 {
-    rectangle_t r;
-	rtree_iterator *it = (rtree_iterator *)iterator;
-    switch (part_count) { 
-      case 0:
-        if (type != ITER_ALL) { 
-             tnt_raise(ClientError, ER_UNSUPPORTED,
+        rectangle_t r;
+        rtree_iterator *it = (rtree_iterator *)iterator;
+        switch (part_count) { 
+        case 0:
+                if (type != ITER_ALL) { 
+                        tnt_raise(ClientError, ER_UNSUPPORTED,
 				  "It is possible to omit key only for ITER_ALL");
+                }
+                break;
+        case 2:
+                r.boundary[0] = r.boundary[2] = mp_decode_uint(&key);
+                r.boundary[1] = r.boundary[3] = mp_decode_uint(&key);
+                break;
+        case 4:
+                for (int i = 0; i < 4; i++) { 
+                        r.boundary[i] = mp_decode_uint(&key);
+                }
+                break;
+        default:
+                tnt_raise(ClientError, ER_UNSUPPORTED,
+                          "R-Tree key should be point (two integer coordinates) or rectangles (four integer coordinates)");
         }
-        break;
-      case 2:
-        r.boundary[0] = r.boundary[2] = mp_decode_uint(&key);
-        r.boundary[1] = r.boundary[3] = mp_decode_uint(&key);
-        break;
-      case 4:
-        for (int i = 0; i < 4; i++) { 
-            r.boundary[i] = mp_decode_uint(&key);
+        Spatial_search_op op;
+        switch (type) { 
+        case ITER_ALL:
+                op = SOP_ALL;
+                break;
+        case ITER_EQ:
+                op = SOP_EQUALS;
+                break;
+        case ITER_GT:
+                op = SOP_STRICT_CONTAINS;
+                break;
+        case ITER_GE:
+                op = SOP_CONTAINS;
+                break;
+        case ITER_LT:
+                op = SOP_STRICT_BELONGS;
+                break;
+        case ITER_LE:
+                op = SOP_BELONGS;
+                break;
+        case ITER_OVERLAPS:
+                op = SOP_OVERLAPS;
+                break;
+        case ITER_NEIGHBOR:
+                op = SOP_NEIGHBOR;
+                break;
+        default:
+                tnt_raise(ClientError, ER_UNSUPPORTED,
+                          "Unsupported search operation %d for R-Tree", type);
         }
-        break;
-      default:
-        tnt_raise(ClientError, ER_UNSUPPORTED,
-				  "R-Tree key should be point (two integer coordinates) or rectangles (four integer coordinates)");
-    }
-    Spatial_search_op op;
-    switch (type) { 
-      case ITER_ALL:
-        op = SOP_ALL;
-        break;
-      case ITER_EQ:
-        op = SOP_EQUALS;
-        break;
-      case ITER_GT:
-        op = SOP_STRICT_CONTAINS;
-        break;
-      case ITER_GE:
-        op = SOP_CONTAINS;
-        break;
-      case ITER_LT:
-        op = SOP_STRICT_BELONGS;
-        break;
-      case ITER_LE:
-        op = SOP_BELONGS;
-        break;
-      case ITER_OVERLAPS:
-        op = SOP_OVERLAPS;
-        break;
-      case ITER_NEIGHBOR:
-        op = SOP_NEIGHBOR;
-        break;
-      default:
-        tnt_raise(ClientError, ER_UNSUPPORTED,
-				  "Unsupported search operation %d for R-Tree", type);
-    }
-    tree.search(r, op, it->impl);
+        tree.search(r, op, it->impl);
 }
-        
+
 void
 RTreeIndex::beginBuild()
 {

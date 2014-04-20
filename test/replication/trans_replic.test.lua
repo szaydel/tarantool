@@ -20,11 +20,13 @@ do
     end
 
     function _insert(_begin, _end)
+        local a = {}
         box.space['tweedledum']:start_trans()
         for i = _begin, _end do
-            box.space['tweedledum']:insert{i, 'the tuple '..i}
+            table.insert(a, box.space['tweedledum']:insert{i, 'the tuple '..i})
         end
         box.space['tweedledum']:commit_trans()
+        return unpack(a)
     end
 
     function _select(_begin, _end)

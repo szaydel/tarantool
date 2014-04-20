@@ -23,11 +23,13 @@ do
     end
 
     function _insert(_begin, _end)
+        local a = {}
         box.space['tweedledum']:start_trans()
         for i = _begin, _end do
-            box.space['tweedledum']:insert{i, 'the tuple '..i}
+            table.insert(a, box.space['tweedledum']:insert{i, 'the tuple '..i})
         end
         box.space['tweedledum']:commit_trans()
+        return unpack(a)
     end
 
     function _select(_begin, _end)
@@ -73,6 +75,16 @@ space:create_index('primary', { type = 'hash' })
 ...
 _insert(1, 10)
 ---
+- [1, 'the tuple 1']
+- [2, 'the tuple 2']
+- [3, 'the tuple 3']
+- [4, 'the tuple 4']
+- [5, 'the tuple 5']
+- [6, 'the tuple 6']
+- [7, 'the tuple 7']
+- [8, 'the tuple 8']
+- [9, 'the tuple 9']
+- [10, 'the tuple 10']
 ...
 _select(1, 10)
 ---
@@ -125,6 +137,16 @@ a:close()
 --# set connection hot_standby
 _insert(11, 20)
 ---
+- [11, 'the tuple 11']
+- [12, 'the tuple 12']
+- [13, 'the tuple 13']
+- [14, 'the tuple 14']
+- [15, 'the tuple 15']
+- [16, 'the tuple 16']
+- [17, 'the tuple 17']
+- [18, 'the tuple 18']
+- [19, 'the tuple 19']
+- [20, 'the tuple 20']
 ...
 _select(11, 20)
 ---

@@ -102,9 +102,9 @@ enum iproto_request_type {
 	IPROTO_DELETE = 5,
 	IPROTO_CALL = 6,
 	IPROTO_AUTH = 7,
-    IPROTO_START_TRANS = 8,
-    IPROTO_COMMIT_TRANS = 9,
-    IPROTO_ROLLBACK_TRANS = 10,
+        IPROTO_START_TRANS = 8,
+        IPROTO_COMMIT_TRANS = 9,
+        IPROTO_ROLLBACK_TRANS = 10,
 	IPROTO_DML_REQUEST_MAX = 11,
 	IPROTO_PING = 64,
 	IPROTO_SUBSCRIBE = 66
@@ -130,6 +130,12 @@ static inline bool
 iproto_request_is_dml(uint32_t type)
 {
 	return type < IPROTO_DML_REQUEST_MAX;
+}
+
+static inline bool
+iproto_request_is_update(uint32_t type)
+{
+	return type >= IPROTO_INSERT && type <= IPROTO_DELETE;
 }
 
 enum {

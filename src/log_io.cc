@@ -248,7 +248,7 @@ error:
 	uint32_t crc32c = mp_decode_uint(&data);
 	assert(data <= fixheader + sizeof(fixheader));
 	(void) crc32p;
-    packet->flags = *data;
+        packet->flags = *data;
 
 	/* Allocate memory for body */
 	char *bodybuf = (char *) region_alloc(&fiber()->gc, len);
@@ -363,10 +363,10 @@ restart:
 	if (fread(&magic, sizeof(magic), 1, l->f) != 1)
 		goto eof;
 
-    while (magic != row_marker) {
-        if (subsequent) { 	
-            return 1;
-        }
+        while (magic != row_marker) {
+                if (subsequent) { 	
+                        return 1;
+                }
 		int c = fgetc(l->f);
 		if (c == EOF) {
 			say_debug("eof while looking for magic");
@@ -377,13 +377,13 @@ restart:
 	}
 	marker_offset = ftello(l->f) - sizeof(row_marker);
 	if (i->good_offset != marker_offset) { 
-        if (subsequent) { 	
-            return 1;
-        }
+                if (subsequent) { 	
+                        return 1;
+                }
 		say_warn("skipped %jd bytes after 0x%08jx offset",
-			(intmax_t)(marker_offset - i->good_offset),
-			(uintmax_t)i->good_offset);
-    }
+                         (intmax_t)(marker_offset - i->good_offset),
+                         (uintmax_t)i->good_offset);
+        }
 	say_debug("magic found at 0x%08jx", (uintmax_t)marker_offset);
 
 	try {
@@ -393,9 +393,9 @@ restart:
 		if (l->dir->panic_if_error)
 			panic("failed to read row");
 		say_warn("failed to read row");
-        if (subsequent) { 
-            return 1;
-        }
+                if (subsequent) { 
+                        return 1;
+                }
 		goto restart;
 	}
 
