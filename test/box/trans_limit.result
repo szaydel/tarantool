@@ -17,9 +17,9 @@ space:create_index('primary', { type = 'hash' })
 ...
 --# setopt delimiter ';'
 function do_transaction()
-    space:start_trans()
+    space:begin()
     for i = 1,100,1 do space:insert{i} end
-    space:commit_trans()
+    space:commit()
 end;
 ---
 ...

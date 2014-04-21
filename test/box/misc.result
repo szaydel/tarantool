@@ -20,10 +20,11 @@ t
   - _insert
   - _replace
   - _update
+  - begin
   - call_loadproc
   - cfg
   - cjson
-  - commit_trans
+  - commit
   - coredump
   - counter
   - dostring
@@ -37,14 +38,13 @@ t
   - pack
   - process
   - raise
-  - rollback_trans
+  - rollback
   - schema
   - session
   - slab
   - snapshot
   - socket
   - space
-  - start_trans
   - stat
   - time
   - time64

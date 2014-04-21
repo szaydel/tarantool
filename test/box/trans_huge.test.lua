@@ -7,12 +7,12 @@ n_trans = 1024
 --# setopt delimiter ';'
 function transaction(tid)
     local id = tid*trans_size
-    space:start_trans()
+    space:begin()
     for i = 1,trans_size,1 do 
         space:insert{id} 
         id = id + 1
     end
-    space:commit_trans()
+    space:commit()
 end;
     
 for tid = 1,n_trans,1 do 

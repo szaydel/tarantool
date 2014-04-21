@@ -269,7 +269,9 @@ lbox_request_create(struct lua_State *L, enum iproto_request_type type,
 	struct request *request = (struct request *)
 		region_alloc(&fiber()->gc, sizeof(struct request));
 	request_create(request, type);
-	request->space_id = lua_tointeger(L, 1);
+        if (lua_gettop(L) > 0) { 
+                request->space_id = lua_tointeger(L, 1);
+        }
 	if (key > 0) {
 		struct tbuf *key_buf = tbuf_new(&fiber()->gc);
 		luamp_encode(L, key_buf, key);
@@ -411,9 +413,9 @@ lbox_delete(lua_State *L)
 static int
 lbox_start_trans(lua_State *L)
 {
-	if (lua_gettop(L) != 1)
-		return luaL_error(L, "Usage space:start_trans()");
-
+        if (lua_gettop(L) != 0) { 
+		return luaL_error(L, "Usage box.begin()");
+        }
         struct region *region = &fiber()->gc;
         if (region->use_count++ == 0) { 
                 trans_region_mark = region_used(region);
@@ -424,15 +426,15 @@ lbox_start_trans(lua_State *L)
 						      -1, -1);
 	box_process(port_lua_create(L), request);
         region_guard.normal_exit = true;
-	return lua_gettop(L) - 1;
+	return lua_gettop(L);
 }
 
 static int
 lbox_commit_trans(lua_State *L)
 {
-	if (lua_gettop(L) != 1)
-		return luaL_error(L, "Usage space:commit_trans()");
-
+        if (lua_gettop(L) != 0) { 
+		return luaL_error(L, "Usage box.commit()");
+        }
         {
                 XRegionGuard region_guard(&fiber()->gc);
                 struct request *request = lbox_request_create(L, IPROTO_COMMIT_TRANS,
@@ -446,15 +448,15 @@ lbox_commit_trans(lua_State *L)
                 region_truncate(region, trans_region_mark);
         }
         
-	return lua_gettop(L) - 1;
+	return lua_gettop(L);
 }
 
 static int
 lbox_rollback_trans(lua_State *L)
 {
-	if (lua_gettop(L) != 1)
-		return luaL_error(L, "Usage space:rollback_trans()");
-
+        if (lua_gettop(L) != 0) { 
+		return luaL_error(L, "Usage box.rollback()");
+        }
         {
                 XRegionGuard region_guard(&fiber()->gc);
                 struct request *request = lbox_request_create(L, IPROTO_ROLLBACK_TRANS,
@@ -466,7 +468,7 @@ lbox_rollback_trans(lua_State *L)
         region->use_count = 0;
         region_truncate(region, trans_region_mark);
         
-	return lua_gettop(L) - 1;
+	return lua_gettop(L);
 }
 
 static int
@@ -1015,9 +1017,9 @@ static const struct luaL_reg boxlib[] = {
 	{"_replace", lbox_replace},
 	{"_update", lbox_update},
 	{"_delete", lbox_delete},
-	{"start_trans", lbox_start_trans},
-	{"commit_trans", lbox_commit_trans},
-	{"rollback_trans", lbox_rollback_trans},
+	{"begin", lbox_start_trans},
+	{"commit", lbox_commit_trans},
+	{"rollback", lbox_rollback_trans},
 	{"call_loadproc",  lbox_call_loadproc},
 	{"raise", lbox_raise},
 	{"pack", lbox_pack},

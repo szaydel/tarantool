@@ -10,7 +10,7 @@ space = box.schema.create_space('tweedledum', { id = 0 })
 space:create_index('primary', { type = 'hash' })
 ---
 ...
-function myinsert(from,till) space:start_trans(); for i = from,till,1 do space:insert{i} end; space:commit_trans(); end
+function myinsert(from,till) space:begin(); for i = from,till,1 do space:insert{i} end; space:commit(); end
 ---
 ...
 call myinsert(1, 10)

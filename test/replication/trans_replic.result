@@ -24,11 +24,11 @@ do
 
     function _insert(_begin, _end)
         local a = {}
-        box.space['tweedledum']:start_trans()
+        box.space['tweedledum']:begin()
         for i = _begin, _end do
             table.insert(a, box.space['tweedledum']:insert{i, 'the tuple '..i})
         end
-        box.space['tweedledum']:commit_trans()
+        box.space['tweedledum']:commit()
         return unpack(a)
     end
 

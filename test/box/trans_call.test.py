@@ -8,7 +8,7 @@ sql.authenticate('test', 'test')
 admin("space = box.schema.create_space('tweedledum', { id = 0 })")
 admin("space:create_index('primary', { type = 'hash' })")
 
-admin("function myinsert(from,till) space:start_trans(); for i = from,till,1 do space:insert{i} end; space:commit_trans(); end")
+admin("function myinsert(from,till) space:begin(); for i = from,till,1 do space:insert{i} end; space:commit(); end")
 sql("call myinsert(1, 10)")
 sql("call myinsert(11, 100)")
 sql("call space:len()")

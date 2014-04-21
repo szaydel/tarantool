@@ -208,15 +208,15 @@ box.net = {
             return result
         end,
 
-        start_trans = function(self)
-            return self:process(box.net.box.START_TRANS, '')
+        begin = function(self)
+            return box.process(box.net.box.START_TRANS, '')
         end,
 
-        commit_trans = function(self)
+        commit = function(self)
             return self:process(box.net.box.COMMIT_TRANS, '')
         end,
 
-        rollback_trans = function(self)
+        rollback = function(self)
             return self:process(box.net.box.ROLLBACK_TRANS, '')
         end,
 
