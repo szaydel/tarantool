@@ -81,7 +81,6 @@ struct region
 {
 	struct slab_cache *cache;
 	struct slab_list slabs;
-    int use_count;
 	char name[REGION_NAME_MAX];
 };
 
@@ -94,7 +93,6 @@ region_create(struct region *region, struct slab_cache *cache)
 {
 	region->cache = cache;
 	slab_list_create(&region->slabs);
-    region->use_count = 0;
 	region->name[0] = '\0';
 }
 
@@ -256,17 +254,15 @@ region_alloc_cb(void *ctx, size_t size)
 struct RegionGuard {
 	struct region *region;
 	size_t used;
-
+        
 	RegionGuard(struct region *_region)
-		: region(_region),
-		  used(region_used(_region)) 
-    {
+        : region(_region),
+          used(region_used(_region)) 
+        {
 	}
 
 	~RegionGuard() {
-        if (region->use_count == 0) { 
-            region_truncate(region, used);
-        }
+                region_truncate(region, used);
 	}
 };
 #endif

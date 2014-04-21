@@ -189,37 +189,6 @@ port_add_lua_multret(struct port *port, struct lua_State *L)
 /* }}} */
 
 
-static size_t trans_region_mark; // memory allocator mark at the beginning of multistatement transaction
-
-// Modified version of RegionGard which takes in account multistatement trasanctions.
-struct XRegionGuard {
-	struct region *region;
-	size_t used;
-        bool normal_exit; // conrol normally reach end of guardeded code and is not interrupted by exception
-        
-	XRegionGuard(struct region *_region)
-        : region(_region),
-          used(region_used(_region)),
-          normal_exit(false) // will be explicitely set to true at the end of code block
-        {
-	}
-        
-	~XRegionGuard() {
-                if (!normal_exit) { // unwinding execution stack
-                        if (region->use_count != 0) { // multistatement transaction
-                                region->use_count = 0;
-                                region_truncate(region, trans_region_mark);
-                                return;
-                        } 
-                } 
-                if (region->use_count == 0) { 
-                        region_truncate(region, used);
-                }
-	}
-};
-
-
-
 /**
  * The main extension provided to Lua by Tarantool/Box --
  * ability to call INSERT/UPDATE/SELECT/DELETE from within
@@ -251,13 +220,11 @@ lbox_process(lua_State *L)
 	int top = lua_gettop(L); /* to know how much is added by rw_callback */
 	lua_newtable(L);
 
-        XRegionGuard region_guard(&fiber()->gc);
 	struct port *port_lua = port_lua_process_create(L);
         struct request request;
         request_create(&request, op);
         request_decode(&request, req, sz);
         box_process(port_lua, &request);
-        region_guard.normal_exit = true;
         
 	return lua_gettop(L) - top;
 }
@@ -357,11 +324,9 @@ lbox_insert(lua_State *L)
 	if (lua_gettop(L) != 2 || !lua_isnumber(L, 1))
 		return luaL_error(L, "Usage space:insert(tuple)");
 
-        XRegionGuard region_guard(&fiber()->gc);
         struct request *request = lbox_request_create(L, IPROTO_INSERT, 
                                                       -1, 2);
         box_process(port_lua_create(L), request);
-        region_guard.normal_exit = true;
 	return lua_gettop(L) - 2;
 }
 
@@ -371,11 +336,9 @@ lbox_replace(lua_State *L)
 	if (lua_gettop(L) != 2 || !lua_isnumber(L, 1))
 		return luaL_error(L, "Usage space:replace(tuple)");
 
-        XRegionGuard region_guard(&fiber()->gc);
         struct request *request = lbox_request_create(L, IPROTO_REPLACE,
                                                       -1, 2);
         box_process(port_lua_create(L), request);
-        region_guard.normal_exit = true;
 	return lua_gettop(L) - 2;
 }
 
@@ -385,12 +348,10 @@ lbox_update(lua_State *L)
 	if (lua_gettop(L) != 4 || !lua_isnumber(L, 1) || !lua_isnumber(L, 2))
 		return luaL_error(L, "Usage space:update(key, ops)");
 
-        XRegionGuard region_guard(&fiber()->gc);
         struct request *request = lbox_request_create(L, IPROTO_UPDATE,
                                                       3, 4);
         /* Ignore index_id for now */
         box_process(port_lua_create(L), request);
-        region_guard.normal_exit = true;
         return lua_gettop(L) - 4;
 }
 
@@ -400,12 +361,10 @@ lbox_delete(lua_State *L)
 	if (lua_gettop(L) != 3 || !lua_isnumber(L, 1) || !lua_isnumber(L, 2))
 		return luaL_error(L, "Usage space:delete(key)");
 
-        XRegionGuard region_guard(&fiber()->gc);
         struct request *request = lbox_request_create(L, IPROTO_DELETE,
                                                       3, -1);
         /* Ignore index_id for now */
         box_process(port_lua_create(L), request);
-        region_guard.normal_exit = true;
         return lua_gettop(L) - 3;
 }
 
@@ -416,16 +375,9 @@ lbox_start_trans(lua_State *L)
         if (lua_gettop(L) != 0) { 
 		return luaL_error(L, "Usage box.begin()");
         }
-        struct region *region = &fiber()->gc;
-        if (region->use_count++ == 0) { 
-                trans_region_mark = region_used(region);
-        }
-        
-        XRegionGuard region_guard(&fiber()->gc);
 	struct request *request = lbox_request_create(L, IPROTO_START_TRANS,
 						      -1, -1);
 	box_process(port_lua_create(L), request);
-        region_guard.normal_exit = true;
 	return lua_gettop(L);
 }
 
@@ -435,18 +387,9 @@ lbox_commit_trans(lua_State *L)
         if (lua_gettop(L) != 0) { 
 		return luaL_error(L, "Usage box.commit()");
         }
-        {
-                XRegionGuard region_guard(&fiber()->gc);
-                struct request *request = lbox_request_create(L, IPROTO_COMMIT_TRANS,
+        struct request *request = lbox_request_create(L, IPROTO_COMMIT_TRANS,
                                                               -1, -1);
-                box_process(port_lua_create(L), request);
-                region_guard.normal_exit = true;
-        }
-        struct region *region = &fiber()->gc;
-        assert(region->use_count > 0);
-        if (--region->use_count == 0) { 
-                region_truncate(region, trans_region_mark);
-        }
+        box_process(port_lua_create(L), request);
         
 	return lua_gettop(L);
 }
@@ -457,16 +400,9 @@ lbox_rollback_trans(lua_State *L)
         if (lua_gettop(L) != 0) { 
 		return luaL_error(L, "Usage box.rollback()");
         }
-        {
-                XRegionGuard region_guard(&fiber()->gc);
-                struct request *request = lbox_request_create(L, IPROTO_ROLLBACK_TRANS,
-                                                              -1, -1);
-                box_process(port_lua_create(L), request);
-                region_guard.normal_exit = true;
-        }
-        struct region *region = &fiber()->gc;
-        region->use_count = 0;
-        region_truncate(region, trans_region_mark);
+        struct request *request = lbox_request_create(L, IPROTO_ROLLBACK_TRANS,
+                                                      -1, -1);
+        box_process(port_lua_create(L), request);
         
 	return lua_gettop(L);
 }

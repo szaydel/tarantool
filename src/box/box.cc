@@ -102,8 +102,6 @@ box_end_request(struct request *request, struct txn * txn, struct port * port)
         }
 }
 
-struct txn * current_multistatement_trasnaction; 
-
 static void
 process_rw(struct port *port, struct request *request)
 {

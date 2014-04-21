@@ -54,9 +54,10 @@ struct txn_request {
 
 struct txn {
         txn_request req;
-        txn_request* tail; /* tail fo L1-list of transaction requests */
+        txn_request* tail; // tail fo L1-list of transaction requests 
         int nesting_level;
         int n_requests;
+        size_t mark; // memory allocator mark at the momemnt of transaction start 
 	struct rlist on_commit;
 	struct rlist on_rollback;
 };

@@ -229,7 +229,7 @@ static void on_fiber_reschedule()
                 // throwing exception in this place cause abnormal termination of Tarantool
 		//tnt_raise(LoggedError, ER_YIELD_NOT_ALLOWED);    
                 txn_current() = NULL;
-                txn_rollback(txn);
+                //txn_rollback(txn);
         }
 }
 
