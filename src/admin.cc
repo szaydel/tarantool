@@ -55,7 +55,7 @@ static int
 admin_dispatch(struct ev_io *coio, struct iobuf *iobuf, lua_State *L)
 {
 	struct ibuf *in = &iobuf->in;
-	struct tbuf *out = tbuf_new(&fiber()->gc);
+	struct tbuf *out = tbuf_new(&iobuf->pool);
 	char *eol;
 	while ((eol = (char *) memchr(in->pos, '\n', in->end - in->pos)) == NULL) {
 		if (coio_bread(coio, in, 1) <= 0)

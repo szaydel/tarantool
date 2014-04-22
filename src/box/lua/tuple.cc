@@ -260,8 +260,6 @@ lbox_tuple_transform(struct lua_State *L)
 		return 1;
 	}
 
-	RegionGuard region_guard(&fiber()->gc);
-
 	/*
 	 * Prepare UPDATE expression
 	 */
@@ -412,7 +410,6 @@ static const struct luaL_reg lbox_tuple_iterator_meta[] = {
 struct tuple*
 lua_totuple(struct lua_State *L, int first, int last)
 {
-	RegionGuard region_guard(&fiber()->gc);
 	struct tbuf *b = tbuf_new(&fiber()->gc);
 	try {
 		luamp_encodestack(L, b, first, last);

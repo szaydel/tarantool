@@ -107,7 +107,7 @@ process_rw(struct port *port, struct request *request)
 {
         struct txn *txn = txn_current();
         bool autocommit = false;
-        if (txn == NULL) { 
+        if (txn == NULL || txn->nesting_level == 0) { 
                 txn = txn_begin();
                 autocommit = true;
         }

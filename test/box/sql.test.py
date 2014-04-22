@@ -18,9 +18,9 @@ sql("select * from t0 where k0 = 1")
 # a space contains 
 sql("select * from t0 where k0 = 0")
 sql("select * from t0 where k0 = 2")
+admin("box.snapshot()")
 server.restart()
 sql("select * from t0 where k0 = 1")
-admin("box.snapshot()")
 sql("select * from t0 where k0 = 1")
 server.restart()
 sql("select * from t0 where k0 = 1")
@@ -75,3 +75,4 @@ print """#
 # Admin console should not stall on unknown command.
 """
 admin("show status", simple=True)
+

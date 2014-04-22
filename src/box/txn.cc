@@ -105,7 +105,6 @@ txn_replace(struct txn *txn, struct space *space,
 struct txn *
 txn_begin()
 {
-        size_t mark = region_used(&fiber()->gc);
 	struct txn *txn = (struct txn *)
 		region_alloc0(&fiber()->gc, sizeof(*txn));
 	rlist_create(&txn->on_commit);
@@ -113,7 +112,7 @@ txn_begin()
         txn->tail = NULL;
         txn->nesting_level = 1;
         txn->n_requests = 0;
-        txn->mark = mark;
+        txn->outer = txn_current();
 	return txn;
 }
 
@@ -198,9 +197,13 @@ txn_finish(struct txn *txn)
                         }
                 } while ((tr = tr->next) != NULL);
         }
-        fiber()->on_reschedule_callback = NULL;
-        region_truncate(&fiber()->gc, txn->mark);
-	//TRASH(txn);
+        fiber()->on_reschedule_callback = NULL;        
+        if (txn->outer == NULL) { 
+                TRASH(txn);
+                fiber_gc();
+        } else { 
+                TRASH(txn);
+        }
 }
 
 
@@ -221,6 +224,10 @@ txn_rollback(struct txn *txn)
                 } while ((tr = tr->next) != NULL);
         }
         fiber()->on_reschedule_callback = NULL;
-        region_truncate(&fiber()->gc, txn->mark);
-        //TRASH(txn);
+        if (txn->outer == NULL) { 
+                TRASH(txn);
+                fiber_gc();
+        } else { 
+                TRASH(txn);
+        }
 }

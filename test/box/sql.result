@@ -43,13 +43,13 @@ select * from t0 where k0 = 0
 select * from t0 where k0 = 2
 ---
 ...
-select * from t0 where k0 = 1
----
-- [1, 'I am a tuple']
-...
 box.snapshot()
 ---
 - ok
+...
+select * from t0 where k0 = 1
+---
+- [1, 'I am a tuple']
 ...
 select * from t0 where k0 = 1
 ---

@@ -534,7 +534,6 @@ void
 box_lua_call(struct request *request, struct txn *txn, struct port *port)
 {
 	struct user *user = user();
-	(void) txn;
 	lua_State *L = lua_newthread(tarantool_L);
 	LuarefGuard coro_ref(tarantool_L);
 	const char *name = request->key;
@@ -542,6 +541,9 @@ box_lua_call(struct request *request, struct txn *txn, struct port *port)
 
 	uint8_t access = PRIV_X & ~user->universal_access;
 	access_check_func(name, name_len, user, access);
+
+        txn->nesting_level = 0; /* LUA call is not treated as nested transaction */
+        txn_current() = txn; 
 
 	/* proc name */
 	int oc = box_lua_find(L, name, name + name_len);
@@ -554,6 +556,7 @@ box_lua_call(struct request *request, struct txn *txn, struct port *port)
 		luamp_decode(L, &args);
 	}
 	lbox_call(L, arg_count + oc - 1, LUA_MULTRET);
+        txn_current() = NULL; 
 	/* Send results of the called procedure to the client. */
 	port_add_lua_multret(port, L);
 }
@@ -632,7 +635,6 @@ lbox_pack(struct lua_State *L)
 	size_t size;
 	const char *str;
 
-	RegionGuard region_guard(&fiber()->gc);
 	struct tbuf *b = tbuf_new(&fiber()->gc);
 
 	struct luaL_field field;

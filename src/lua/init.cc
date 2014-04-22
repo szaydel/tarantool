@@ -73,6 +73,9 @@ static const char *lua_sources[] = { uuid_lua, session_lua,
 	load_cfg_lua, interactive_lua, NULL };
 static const char *lua_modules[] = { "msgpackffi", msgpackffi_lua,
 	"fun", fun_lua, NULL };
+
+static struct region buf_reg;
+
 /*
  * {{{ box Lua library: common functions
  */
@@ -333,7 +336,6 @@ tarantool_lua_init()
 static int
 tarantool_lua_dostring(struct lua_State *L, const char *str)
 {
-	RegionGuard region_guard(&fiber()->gc);
 	struct tbuf *buf = tbuf_new(&fiber()->gc);
 	tbuf_printf(buf, "%s%s", "return ", str);
 	int r = luaL_loadstring(L, tbuf_str(buf));
@@ -438,20 +440,22 @@ extern "C" void
 tarantool_lua_interactive()
 {
 	char *line;
+        region_create(&buf_reg, &cord()->slabc);
 	while (true) {
 		coeio_custom(readline_cb, TIMEOUT_INFINITY, &line);
 		if (line == NULL)
 			break;
-		struct tbuf *out = tbuf_new(&fiber()->gc);
+		struct tbuf *out = tbuf_new(&buf_reg);
 		struct lua_State *L = lua_newthread(tarantool_L);
 		tarantool_lua(L, out, line);
 		lua_pop(tarantool_L, 1);
 		printf("%.*s", out->size, out->data);
-		fiber_gc();
+		region_reset(&buf_reg);
 		if (history)
 			add_history(line);
 		free(line);
 	}
+        region_destroy(&buf_reg);
 }
 
 /**

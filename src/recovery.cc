@@ -139,12 +139,14 @@ confirm_lsn(struct recovery_state *r, int64_t lsn, bool is_commit)
 
 	if (r->confirmed_lsn < lsn) {
 		if (is_commit) {
+                        #if 0 // not true any more for multistatement transactions 
 			if (r->confirmed_lsn + 1 != lsn)
 				say_warn("non consecutive LSN, confirmed: %jd, "
 					 " new: %jd, diff: %jd",
 					 (intmax_t) r->confirmed_lsn,
 					 (intmax_t) lsn,
 					 (intmax_t) (lsn - r->confirmed_lsn));
+                        #endif
 			r->confirmed_lsn = lsn;
 		 }
 	} else {
@@ -427,7 +429,7 @@ recover_wal(struct recovery_state *r, struct log_io *l)
                                         packet.flags |= WAL_REQ_FLAG_HAS_NEXT; /* goto say_error("can't read multistatement transaction"); */
                                         break;
                                 }
-                                iproto_packet_list* node = (iproto_packet_list*)region_alloc(&fiber()->gc, sizeof(iproto_packet_list));
+                                iproto_packet_list* node = new (iproto_packet_list*)region_alloc(&fiber()->gc, sizeof(iproto_packet_list));
                                 if (packet_list_head == NULL) {
                                         packet_list_head = node;
                                 } else { 
@@ -1116,6 +1118,7 @@ wal_opt_rotate(struct log_io **wal, int rows_per_wal, struct log_dir *dir,
 	}
 	assert(wal_to_close == NULL);
 	*wal = l;
+        fiber_gc();
 	return l ? 0 : -1;
 }
 
