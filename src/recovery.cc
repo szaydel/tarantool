@@ -429,7 +429,7 @@ recover_wal(struct recovery_state *r, struct log_io *l)
                                         packet.flags |= WAL_REQ_FLAG_HAS_NEXT; /* goto say_error("can't read multistatement transaction"); */
                                         break;
                                 }
-                                iproto_packet_list* node = new (iproto_packet_list*)region_alloc(&fiber()->gc, sizeof(iproto_packet_list));
+                                iproto_packet_list* node = (iproto_packet_list*)region_alloc(&fiber()->gc, sizeof(iproto_packet_list));
                                 if (packet_list_head == NULL) {
                                         packet_list_head = node;
                                 } else { 
@@ -900,7 +900,7 @@ wal_schedule_queue(struct wal_fifo *queue, struct wal_writer *writer)
                 if (!(req->packet->flags & WAL_REQ_FLAG_HAS_NEXT)) { 
                         fiber_call(req->fiber);
                         writer->acc_res = 0; /* prepare for new multistatement transaction */
-                }
+                } 
         }
 }
 
