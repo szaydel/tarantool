@@ -139,7 +139,7 @@ confirm_lsn(struct recovery_state *r, int64_t lsn, bool is_commit)
 
 	if (r->confirmed_lsn < lsn) {
 		if (is_commit) {
-                        #if 0 // not true any more for multistatement transactions 
+                        #if 0 // not true any more for multistatement transactions
 			if (r->confirmed_lsn + 1 != lsn)
 				say_warn("non consecutive LSN, confirmed: %jd, "
 					 " new: %jd, diff: %jd",
@@ -392,7 +392,7 @@ error:
 	panic("snapshot recovery failed");
 }
 
-struct iproto_packet_list { 
+struct iproto_packet_list {
     iproto_packet packet;
     iproto_packet_list* next;
 };
@@ -421,39 +421,47 @@ recover_wal(struct recovery_state *r, struct log_io *l)
 			say_debug("skipping too young row");
 			continue;
 		}
-                if ((packet.flags & (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT)) == (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT)) {             
+                if ((packet.flags & (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT)) == (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT))
+                {
                         int64_t lsn = packet.lsn;
-                        /* multistatement transaction */
-                        do { 
-                                if (packet.lsn != lsn || !(packet.flags & WAL_REQ_FLAG_IN_TRANS)) { 
-                                        packet.flags |= WAL_REQ_FLAG_HAS_NEXT; /* goto say_error("can't read multistatement transaction"); */
+                        // multistatement transaction
+                        do {
+                                if (packet.lsn != lsn || !(packet.flags & WAL_REQ_FLAG_IN_TRANS)) {
+                                        packet.flags |= WAL_REQ_FLAG_HAS_NEXT; // goto say_error("can't read multistatement transaction");
                                         break;
                                 }
                                 iproto_packet_list* node = (iproto_packet_list*)region_alloc(&fiber()->gc, sizeof(iproto_packet_list));
                                 if (packet_list_head == NULL) {
                                         packet_list_head = node;
-                                } else { 
+                                } else {
                                         packet_list_tail->next = node;
                                 }
                                 packet_list_tail = node;
                                 node->packet = packet;
-                                lsn += 1;
+                                lsn += 1; // requests of multistatement transaction should have subsequent LSNs
                         } while ((packet.flags & WAL_REQ_FLAG_HAS_NEXT) && log_io_cursor_next(&i, &packet, true) == 0);
-                        
-                        if (packet.flags & WAL_REQ_FLAG_HAS_NEXT) { /* failed to read all multistatement transaction */
+
+                        if (packet.flags & WAL_REQ_FLAG_HAS_NEXT) { // failed to read all multistatement transaction
                                 say_error("can't read multistatement transaction");
                                 continue;
                         }
-                        packet_list_tail->next = NULL;
-                        for (iproto_packet_list* node = packet_list_head; node != NULL; node = node->next) { 
-                                if (r->row_handler(r->row_handler_param, &packet) < 0) {
+                        assert(packet_list_head != NULL); // have at least one packet
+                        while (true) {
+                                if (r->row_handler(r->row_handler_param, &packet_list_head->packet) < 0) {
                                         say_error("can't apply row");
                                         if (l->dir->panic_if_error) {
                                                 goto end;
                                         }
                                 }
-                        }                 
-                } else if (packet.flags & WAL_REQ_FLAG_IN_TRANS) { 
+                                /* fiber()->gc region will be deallocated after processing of last request,
+                                 * so do not accessobject allcoated in this region after it
+                                 */
+                                if (packet_list_head == packet_list_tail) {
+                                        break;
+                                }
+                                packet_list_head = packet_list_head->next;
+                        }
+                } else if (packet.flags & WAL_REQ_FLAG_IN_TRANS) {
 			say_debug("skipping internal row of multistatement transaction");
 			continue;
                 } else  {
@@ -890,17 +898,17 @@ wal_schedule_queue(struct wal_fifo *queue, struct wal_writer *writer)
 	 */
 	struct wal_write_request *req, *tmp;
 	STAILQ_FOREACH_SAFE(req, queue, wal_fifo_entry, tmp) {
-                if (req->packet->flags & WAL_REQ_FLAG_IN_TRANS) { 
+                if (req->packet->flags & WAL_REQ_FLAG_IN_TRANS) {
                         /* Accumulate total result of multistatement transaction in acc_res.
                          * Result is 0 (ok) or -1 (error) so use OR.
                          * Also update req->res, so that last request of multistatement transaction contains cummulative result
                          */
-                        req->res = writer->acc_res |= req->res; 
+                        req->res = writer->acc_res |= req->res;
                 }
-                if (!(req->packet->flags & WAL_REQ_FLAG_HAS_NEXT)) { 
+                if (!(req->packet->flags & WAL_REQ_FLAG_HAS_NEXT)) {
                         fiber_call(req->fiber);
                         writer->acc_res = 0; /* prepare for new multistatement transaction */
-                } 
+                }
         }
 }
 
@@ -918,7 +926,7 @@ wal_schedule(ev_loop * /* loop */, ev_async *watcher, int /* event */)
 		writer->is_rollback = false;
 	}
 	(void) tt_pthread_mutex_unlock(&writer->mutex);
-        
+
 	wal_schedule_queue(&commit, writer);
 	/*
 	 * Perform a cascading abort of all transactions which
@@ -1149,7 +1157,7 @@ wal_fill_batch(struct log_io *wal, struct fio_batch *batch, int rows_per_wal,
 {
 	int max_rows = wal->is_inprogress ? 1 : rows_per_wal - wal->rows;
 	/* Post-condition of successful wal_opt_rotate(). */
-	if (max_rows <= 0) { 
+	if (max_rows <= 0) {
         max_rows = 1;
     }
 	fio_batch_start(batch, max_rows);
@@ -1183,10 +1191,10 @@ wal_write_to_disk(struct recovery_state *r, struct wal_writer *writer,
 {
 	struct log_io **wal = &r->current_wal;
 	struct fio_batch *batch = writer->batch;
-        
+
 	struct wal_write_request *req = STAILQ_FIRST(input);
 	struct wal_write_request *write_end = req;
-        
+
 	while (req) {
                 bool in_multistatement_trans = (req->packet->flags & (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS)) == WAL_REQ_FLAG_IN_TRANS;
                 if (!in_multistatement_trans /* can not switch log until multistatement transaction is finished */
@@ -1200,7 +1208,7 @@ wal_write_to_disk(struct recovery_state *r, struct wal_writer *writer,
                 if (batch_end != write_end)
                         break;
                 wal_opt_sync(*wal, r->wal_fsync_delay);
-                req = write_end; 
+                req = write_end;
         }
 	STAILQ_SPLICE(input, write_end, wal_fifo_entry, rollback);
 	STAILQ_CONCAT(commit, input);
@@ -1272,12 +1280,12 @@ wal_write(struct recovery_state *r, struct iproto_packet *packet)
 	bool input_was_empty = STAILQ_EMPTY(&writer->input);
 	STAILQ_INSERT_TAIL(&writer->input, req, wal_fifo_entry);
 
-	if (input_was_empty) { 
+	if (input_was_empty) {
 		(void) tt_pthread_cond_signal(&writer->cond);
         }
 	(void) tt_pthread_mutex_unlock(&writer->mutex);
-        
-        if (!(packet->flags & WAL_REQ_FLAG_HAS_NEXT)) { 
+
+        if (!(packet->flags & WAL_REQ_FLAG_HAS_NEXT)) {
                 fiber_yield(); /* Request was inserted. */
                 return req->res;
         }

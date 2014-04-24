@@ -77,10 +77,10 @@ struct request_replace_body {
 void
 port_send_tuple(struct port *port, struct txn *txn)
 {
-        txn_request* tr = txn->tail; 
-        if (txn->tail != NULL) { 
+        txn_request* tr = txn->tail;
+        if (txn->tail != NULL) {
                 struct tuple *tuple;
-                if ((tuple = tr->new_tuple) || (tuple = tr->old_tuple)) { 
+                if ((tuple = tr->new_tuple) || (tuple = tr->old_tuple)) {
                         port_add_tuple(port, tuple);
                 }
         }
@@ -97,7 +97,7 @@ box_commit_trans(struct txn * txn, struct port * port)
 void
 box_end_request(struct request *request, struct txn * txn, struct port * port)
 {
-        if (iproto_request_is_update(request->code)) { 
+        if (iproto_request_is_update(request->code)) {
                 port_send_tuple(port, txn);
         }
 }
@@ -107,7 +107,7 @@ process_rw(struct port *port, struct request *request)
 {
         struct txn *txn = txn_current();
         bool autocommit = false;
-        if (txn == NULL || txn->nesting_level == 0) { 
+        if (txn == NULL || txn->nesting_level == 0) {
                 txn = txn_begin();
                 autocommit = true;
         }
@@ -117,7 +117,7 @@ process_rw(struct port *port, struct request *request)
 
                 box_end_request(request, txn, port);
 
-                if (autocommit && txn_current() == NULL) { 
+                if (autocommit && txn_current() == NULL) {
                         box_commit_trans(txn, port);
                 }
 	} catch (Exception *e) {
@@ -152,8 +152,8 @@ recover_row(void *param __attribute__((unused)),
         struct request request;
 	try {
 		assert(packet->bodycnt == 1); /* always 1 for read */
-                if ((packet->flags & (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_HAS_NEXT)) == (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_HAS_NEXT)) { 
-                        request_create(&request, IPROTO_START_TRANS);            
+                if ((packet->flags & (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS)) == (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS)) {
+                        request_create(&request, IPROTO_START_TRANS);
                         process_rw(&null_port, &request);
                 }
 		request_create(&request, packet->code);
@@ -161,15 +161,15 @@ recover_row(void *param __attribute__((unused)),
                                packet->body[0].iov_len);
 		request.packet = packet;
 		process_rw(&null_port, &request);
-                if ((packet->flags & (WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT)) == WAL_REQ_FLAG_IN_TRANS) { 
-                        request_create(&request, IPROTO_COMMIT_TRANS);            
+                if ((packet->flags & (WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT)) == WAL_REQ_FLAG_IN_TRANS) {
+                        request_create(&request, IPROTO_COMMIT_TRANS);
                         process_rw(&null_port, &request);
                 }
 	} catch (Exception *e) {
 		e->log();
-                if (packet->flags & WAL_REQ_FLAG_IN_TRANS) { 
-                        try { 
-                                request_create(&request, IPROTO_ROLLBACK_TRANS);            
+                if (packet->flags & WAL_REQ_FLAG_IN_TRANS) {
+                        try {
+                                request_create(&request, IPROTO_ROLLBACK_TRANS);
                                 process_rw(&null_port, &request);
                         } catch (Exception *x) {
                                 x->log();
@@ -177,7 +177,7 @@ recover_row(void *param __attribute__((unused)),
                 }
 		return -1;
 	}
-        
+
 	return 0;
 }
 

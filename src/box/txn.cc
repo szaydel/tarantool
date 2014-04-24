@@ -43,13 +43,13 @@ static txn_request* new_txn_request(struct txn *txn)
 {
         txn_request* tr;
         txn->n_requests += 1;
-        if (multistatement_transaction_limit != 0 && txn->n_requests > multistatement_transaction_limit) { 
+        if (multistatement_transaction_limit != 0 && txn->n_requests > multistatement_transaction_limit) {
                 txn_current() = NULL;
 		tnt_raise(LoggedError, ER_TRANSACTION_TOO_LONG, multistatement_transaction_limit);
-        } 
-        if (txn->tail == NULL) { 
+        }
+        if (txn->tail == NULL) {
                 txn->tail = tr = &txn->req;
-        } else { 
+        } else {
                 tr = (txn_request*)region_alloc0(&fiber()->gc, sizeof(*tr));
                 txn->tail = txn->tail->next = tr;
         }
@@ -62,8 +62,8 @@ void
 txn_add_redo(struct txn *txn, struct request *request)
 {
         txn_request* tr = new_txn_request(txn);
-	if (recovery_state->wal_mode == WAL_NONE) { 
-		return;	
+	if (recovery_state->wal_mode == WAL_NONE) {
+		return;
         }
         struct iproto_packet *packet = request->packet;
 	if (packet == NULL) {
@@ -71,7 +71,7 @@ txn_add_redo(struct txn *txn, struct request *request)
 		packet = (struct iproto_packet *)region_alloc0(&fiber()->gc, sizeof(*packet));
 		packet->code = request->code;
 		packet->bodycnt = request_encode(request, packet->body);
-	} 
+	}
         tr->packet = packet;
 }
 
@@ -119,17 +119,17 @@ txn_begin()
 void
 txn_commit(struct txn *txn)
 {
-        if (txn->tail == NULL) { 
+        if (txn->tail == NULL) {
                 return; /* nothing to commit */
         }
-        txn_request* tr = &txn->req; 
+        txn_request* tr = &txn->req;
         int flags = WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT;
-        
+
         // First set flags
         struct iproto_packet* last_packet = NULL;
-        do {      
+        do {
                 if ((tr->old_tuple || tr->new_tuple) &&
-                    !space_is_temporary(tr->space)) 
+                    !space_is_temporary(tr->space))
                 {
                         if (recovery_state->wal_mode != WAL_NONE) {
                                 struct iproto_packet *packet = tr->packet;
@@ -140,18 +140,18 @@ txn_commit(struct txn *txn)
                         }
                 }
         } while ((tr = tr->next) != NULL);
-        
-        if (last_packet != NULL) {    
+
+        if (last_packet != NULL) {
                 if (last_packet->flags & WAL_REQ_FLAG_IS_FIRST) { // transaction with single statement
                         last_packet->flags &= ~WAL_REQ_FLAG_IN_TRANS;
-                } 
+                }
                 last_packet->flags &= ~WAL_REQ_FLAG_HAS_NEXT;
                 // And now send packets to WAL writers
-                tr = &txn->req; 
+                tr = &txn->req;
                 int64_t lsn = 0;
-                do {      
+                do {
                         if ((tr->old_tuple || tr->new_tuple) &&
-                            !space_is_temporary(tr->space)) 
+                            !space_is_temporary(tr->space))
                         {
                                 struct iproto_packet *packet = tr->packet;
                                 lsn = next_lsn(recovery_state);
@@ -161,7 +161,7 @@ txn_commit(struct txn *txn)
                                         packet->lsn = lsn;
                                         res = wal_write(recovery_state, packet);
                                         stop = ev_now(loop());
-                                        
+
                                         if (stop - start > too_long_threshold) {
                                                 say_warn("too long %s: %.3f sec",
                                                          iproto_request_name(packet->code),
@@ -169,13 +169,13 @@ txn_commit(struct txn *txn)
                                         }
                                 }
                                 if (res) {
-                                        confirm_lsn(recovery_state, lsn, false);            
+                                        confirm_lsn(recovery_state, lsn, false);
                                         tnt_raise(LoggedError, ER_WAL_IO);
                                 }
                         }
                 } while ((tr = tr->next) != NULL);
-                
-                confirm_lsn(recovery_state, lsn, true);            
+
+                confirm_lsn(recovery_state, lsn, true);
         }
         trigger_run(&txn->on_commit, txn); /* must not throw. */
 }
@@ -189,19 +189,19 @@ txn_commit(struct txn *txn)
 void
 txn_finish(struct txn *txn)
 {
-        if (txn->tail != NULL) { 
-                txn_request* tr = &txn->req; 
-                do {      
-                        if (tr->old_tuple) { 
+        if (txn->tail != NULL) {
+                txn_request* tr = &txn->req;
+                do {
+                        if (tr->old_tuple) {
                                 tuple_ref(tr->old_tuple, -1);
                         }
                 } while ((tr = tr->next) != NULL);
         }
-        fiber()->on_reschedule_callback = NULL;        
-        if (txn->outer == NULL) { 
+        fiber()->on_reschedule_callback = NULL;
+        if (txn->outer == NULL) {
                 TRASH(txn);
                 fiber_gc();
-        } else { 
+        } else {
                 TRASH(txn);
         }
 }
@@ -210,24 +210,24 @@ txn_finish(struct txn *txn)
 void
 txn_rollback(struct txn *txn)
 {
-        if (txn->tail != NULL) { 
-                txn_request* tr = &txn->req; 
-                do {      
+        if (txn->tail != NULL) {
+                txn_request* tr = &txn->req;
+                do {
                         if (tr->old_tuple || tr->new_tuple) {
                                 space_replace(tr->space, tr->new_tuple,
                                               tr->old_tuple, DUP_INSERT);
                                 trigger_run(&txn->on_rollback, tr); /* must not throw. */
-                                if (tr->new_tuple) { 
+                                if (tr->new_tuple) {
                                         tuple_ref(tr->new_tuple, -1);
                                 }
                         }
                 } while ((tr = tr->next) != NULL);
         }
         fiber()->on_reschedule_callback = NULL;
-        if (txn->outer == NULL) { 
+        if (txn->outer == NULL) {
                 TRASH(txn);
                 fiber_gc();
-        } else { 
+        } else {
                 TRASH(txn);
         }
 }
