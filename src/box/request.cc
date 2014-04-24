@@ -225,20 +225,21 @@ execute_auth(struct request *request, struct txn * /* txn */,
 static void on_fiber_reschedule()
 {
         struct txn * txn = txn_current();
-        if (txn != NULL) { 
+        if (txn != NULL) {
                 // throwing exception in this place cause abnormal termination of Tarantool
-		//tnt_raise(LoggedError, ER_YIELD_NOT_ALLOWED);    
+		//tnt_raise(LoggedError, ER_YIELD_NOT_ALLOWED);
                 txn_current() = NULL;
+                // resetting fiber()->gc() region in rollback cause crash
                 //txn_rollback(txn);
         }
 }
 
 
-void 
+void
 execute_start_trans(struct request * /*request */, struct txn * txn,
                     struct port * /* port */)
 {
-        if (txn_current() != NULL) { 
+        if (txn_current() != NULL) {
                 txn_current()->nesting_level += 1;
         } else {
                 assert(txn->nesting_level == 1);
@@ -247,25 +248,25 @@ execute_start_trans(struct request * /*request */, struct txn * txn,
         txn_current() = txn;
 }
 
-void 
+void
 execute_rollback_trans(struct request * /*request*/, struct txn * txn,
                     struct port * /* port */)
 {
-        if (txn_current() == NULL) { 
+        if (txn_current() == NULL) {
 		tnt_raise(LoggedError, ER_NO_ACTIVE_TRANSACTION);
         }
         txn_current() = NULL;
         txn_rollback(txn);
 }
 
-void 
+void
 execute_commit_trans(struct request * /* request */, struct txn * txn,
                     struct port * port)
 {
-        if (txn_current() == NULL) { 
+        if (txn_current() == NULL) {
 		tnt_raise(LoggedError, ER_NO_ACTIVE_TRANSACTION);
         }
-        if (--txn_current()->nesting_level == 0)  { 
+        if (--txn_current()->nesting_level == 0)  {
                 txn_current() = NULL;
                 box_commit_trans(txn, port);
         }
@@ -287,7 +288,7 @@ request_create(struct request *request, uint32_t code)
 	static const request_execute_f execute_map[] = {
 		NULL, execute_select, execute_replace, execute_replace,
 		execute_update, execute_delete, box_lua_call,
-		execute_auth, execute_start_trans, execute_commit_trans, execute_rollback_trans, 
+		execute_auth, execute_start_trans, execute_commit_trans, execute_rollback_trans,
 	};
 	memset(request, 0, sizeof(*request));
 	request->execute = execute_map[code];

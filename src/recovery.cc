@@ -1157,9 +1157,9 @@ wal_fill_batch(struct log_io *wal, struct fio_batch *batch, int rows_per_wal,
 {
 	int max_rows = wal->is_inprogress ? 1 : rows_per_wal - wal->rows;
 	/* Post-condition of successful wal_opt_rotate(). */
-	if (max_rows <= 0) {
-        max_rows = 1;
-    }
+	if (max_rows <= 0) { // for multistatement transaction we can write more than rows_per_wal in log file
+                max_rows = 1;
+        }
 	fio_batch_start(batch, max_rows);
 
 	struct iovec iov[XLOG_ROW_IOVMAX];

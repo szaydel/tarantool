@@ -225,7 +225,7 @@ lbox_process(lua_State *L)
         request_create(&request, op);
         request_decode(&request, req, sz);
         box_process(port_lua, &request);
-        
+
 	return lua_gettop(L) - top;
 }
 
@@ -236,7 +236,7 @@ lbox_request_create(struct lua_State *L, enum iproto_request_type type,
 	struct request *request = (struct request *)
 		region_alloc(&fiber()->gc, sizeof(struct request));
 	request_create(request, type);
-        if (lua_gettop(L) > 0) { 
+        if (lua_gettop(L) > 0) {
                 request->space_id = lua_tointeger(L, 1);
         }
 	if (key > 0) {
@@ -324,7 +324,7 @@ lbox_insert(lua_State *L)
 	if (lua_gettop(L) != 2 || !lua_isnumber(L, 1))
 		return luaL_error(L, "Usage space:insert(tuple)");
 
-        struct request *request = lbox_request_create(L, IPROTO_INSERT, 
+        struct request *request = lbox_request_create(L, IPROTO_INSERT,
                                                       -1, 2);
         box_process(port_lua_create(L), request);
 	return lua_gettop(L) - 2;
@@ -372,7 +372,7 @@ lbox_delete(lua_State *L)
 static int
 lbox_start_trans(lua_State *L)
 {
-        if (lua_gettop(L) != 0) { 
+        if (lua_gettop(L) != 0) {
 		return luaL_error(L, "Usage box.begin()");
         }
 	struct request *request = lbox_request_create(L, IPROTO_START_TRANS,
@@ -384,26 +384,26 @@ lbox_start_trans(lua_State *L)
 static int
 lbox_commit_trans(lua_State *L)
 {
-        if (lua_gettop(L) != 0) { 
+        if (lua_gettop(L) != 0) {
 		return luaL_error(L, "Usage box.commit()");
         }
         struct request *request = lbox_request_create(L, IPROTO_COMMIT_TRANS,
                                                               -1, -1);
         box_process(port_lua_create(L), request);
-        
+
 	return lua_gettop(L);
 }
 
 static int
 lbox_rollback_trans(lua_State *L)
 {
-        if (lua_gettop(L) != 0) { 
+        if (lua_gettop(L) != 0) {
 		return luaL_error(L, "Usage box.rollback()");
         }
         struct request *request = lbox_request_create(L, IPROTO_ROLLBACK_TRANS,
                                                       -1, -1);
         box_process(port_lua_create(L), request);
-        
+
 	return lua_gettop(L);
 }
 
@@ -516,8 +516,8 @@ access_check_func(const char *name, uint32_t name_len,
 
 	struct func_def *func = func_by_name(name, name_len);
 	if (func == NULL || (func->uid != user->uid && user->uid != ADMIN &&
-			     access & ~func->access[user->auth_token])) {
-                
+			     access & ~func->access[user->auth_token]))
+        {
 		char name_buf[BOX_NAME_MAX + 1];
 		snprintf(name_buf, sizeof(name_buf), "%.*s", name_len, name);
 
@@ -543,7 +543,7 @@ box_lua_call(struct request *request, struct txn *txn, struct port *port)
 	access_check_func(name, name_len, user, access);
 
         txn->nesting_level = 0; /* LUA call is not treated as nested transaction */
-        txn_current() = txn; 
+        txn_current() = txn;
 
 	/* proc name */
 	int oc = box_lua_find(L, name, name + name_len);
@@ -556,7 +556,7 @@ box_lua_call(struct request *request, struct txn *txn, struct port *port)
 		luamp_decode(L, &args);
 	}
 	lbox_call(L, arg_count + oc - 1, LUA_MULTRET);
-        txn_current() = NULL; 
+        txn_current() = NULL;
 	/* Send results of the called procedure to the client. */
 	port_add_lua_multret(port, L);
 }

@@ -198,15 +198,15 @@ key_def_check(struct key_def *key_def)
 		break;
 	case RTREE:
 		if (key_def->part_count != 2 && key_def->part_count != 4) {
-            tnt_raise(ClientError, ER_MODIFY_INDEX,
-                      "R-Tree index can be defied only for points (two parts) or rectangles (four parts)");
-        }
-        for (int i = 0; i < key_def->part_count; i++) { 
-            if (key_def->parts[i].type != NUM) { 
-                tnt_raise(ClientError, ER_MODIFY_INDEX,
-                          "R-Tree index can be defied only for numeric fields");
-            }
-        }    
+                        tnt_raise(ClientError, ER_MODIFY_INDEX,
+                                  "R-Tree index can be defied only for points (two parts) or rectangles (four parts)");
+                }
+                for (int i = 0; i < key_def->part_count; i++) {
+                        if (key_def->parts[i].type != NUM) {
+                                tnt_raise(ClientError, ER_MODIFY_INDEX,
+                                          "R-Tree index can be defied only for numeric fields");
+                        }
+                }
 		break;
 	case BITSET:
 		if (key_def->part_count != 1) {

@@ -729,11 +729,11 @@ on_rollback_in_old_space(struct trigger *trigger, void *event)
 	struct txn *txn = (struct txn *) event;
 	Index *new_index = (Index *) trigger->data;
 	/* Remove the failed tuple from the new index. */
-    for (txn_request* tr = &txn->req; tr != NULL; tr = tr->next) { 
-        if (tr->new_tuple && tr->old_tuple) { 
-            new_index->replace(tr->new_tuple, tr->old_tuple, DUP_INSERT);
+        for (txn_request* tr = &txn->req; tr != NULL; tr = tr->next) {
+                if (tr->new_tuple && tr->old_tuple) {
+                        new_index->replace(tr->new_tuple, tr->old_tuple, DUP_INSERT);
+                }
         }
-    }
 }
 
 /**
