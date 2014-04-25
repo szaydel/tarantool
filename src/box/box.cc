@@ -78,11 +78,9 @@ void
 port_send_tuple(struct port *port, struct txn *txn)
 {
         txn_request* tr = txn->tail;
-        if (txn->tail != NULL) {
-                struct tuple *tuple;
-                if ((tuple = tr->new_tuple) || (tuple = tr->old_tuple)) {
-                        port_add_tuple(port, tuple);
-                }
+        struct tuple *tuple;
+        if ((tuple = tr->new_tuple) || (tuple = tr->old_tuple)) {
+                port_add_tuple(port, tuple);
         }
 }
 

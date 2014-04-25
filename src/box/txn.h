@@ -38,8 +38,8 @@ struct space;
 
 struct txn_request {
         /* L1-list of requests for multistatement transaction */
-        txn_request* next; 
-        
+        txn_request* next;
+
 	/* Undo info. */
 	struct space *space;
 	struct tuple *old_tuple;
@@ -54,12 +54,16 @@ struct txn_request {
 
 struct txn {
         txn_request req;
-        txn_request* tail; // tail fo L1-list of transaction requests 
+        txn_request* tail; // tail fo L1-list of transaction requests
         int nesting_level;
         int n_requests;
         struct txn* outer; // outer transaction
 	struct rlist on_commit;
 	struct rlist on_rollback;
+
+        txn_request* curr_req() const {
+                return tail;
+        }
 };
 
 struct txn *txn_begin();
