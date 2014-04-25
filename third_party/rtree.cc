@@ -215,6 +215,7 @@ R_tree_iterator::Neighbor* R_tree_iterator::new_neighbor(void* child, area_t dis
     n->distance = distance;
     n->level = level;
     n->next = NULL;
+    return n;
 }
 
 void R_tree_iterator::free_neighbor(Neighbor* n)
