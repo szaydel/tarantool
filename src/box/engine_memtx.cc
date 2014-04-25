@@ -32,7 +32,6 @@
 #include "index.h"
 #include "hash_index.h"
 #include "tree_index.h"
-#include "rtree_index.h"
 #include "bitset_index.h"
 #include "space.h"
 #include "exception.h"
@@ -90,8 +89,6 @@ MemtxFactory::createIndex(struct key_def *key_def)
 		return new HashIndex(key_def);
 	case TREE:
 		return new TreeIndex(key_def);
-	case RTREE:
-		return new RTreeIndex(key_def);
 	case BITSET:
 		return new BitsetIndex(key_def);
 	default:

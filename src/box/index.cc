@@ -46,7 +46,7 @@ key_validate_parts(struct key_def *key_def, const char *key,
 		mp_next(&key);
 
 		key_mp_type_validate(key_def->parts[part].type, mp_type,
-                                     ER_KEY_FIELD_TYPE, part);
+				     ER_KEY_FIELD_TYPE, part);
 	}
 }
 
@@ -66,28 +66,17 @@ key_validate(struct key_def *key_def, enum iterator_type type, const char *key,
 			return;
 		/* Fall through. */
 	}
-        if (key_def->type == RTREE) {
-                if (part_count != 2 && part_count != 4) {
-                        tnt_raise(ClientError, ER_KEY_PART_COUNT,
-                                  "R-Tree key should be point (two integer coordinates) or rectangles (four integer coordinates)");
-                }
-                for (uint32_t part = 0; part < part_count; part++) {
-                        enum mp_type mp_type = mp_typeof(*key);
-                        mp_next(&key);
-                        key_mp_type_validate(NUM, mp_type, ER_KEY_FIELD_TYPE, part);
-                }
-        } else {
-                if (part_count > key_def->part_count)
-                        tnt_raise(ClientError, ER_KEY_PART_COUNT,
-                                  key_def->part_count, part_count);
 
-                /* Partial keys are allowed only for TREE index type. */
-                if (key_def->type != TREE && part_count < key_def->part_count) {
-                        tnt_raise(ClientError, ER_EXACT_MATCH,
-                                  key_def->part_count, part_count);
-                }
-                key_validate_parts(key_def, key, part_count);
-        }
+	if (part_count > key_def->part_count)
+		tnt_raise(ClientError, ER_KEY_PART_COUNT,
+			  key_def->part_count, part_count);
+
+	/* Partial keys are allowed only for TREE index type. */
+	if (key_def->type != TREE && part_count < key_def->part_count) {
+		tnt_raise(ClientError, ER_EXACT_MATCH,
+			  key_def->part_count, part_count);
+	}
+	key_validate_parts(key_def, key, part_count);
 }
 
 void
