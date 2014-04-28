@@ -54,7 +54,7 @@ struct txn_request {
 
 struct txn {
         txn_request req;
-        txn_request* tail; // tail fo L1-list of transaction requests
+        txn_request* tail; // tail for L1-list of transaction requests
         int nesting_level;
         int n_requests;
         struct txn* outer; // outer transaction
