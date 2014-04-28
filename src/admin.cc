@@ -51,14 +51,10 @@ extern "C" {
 #include "session.h"
 #include "scoped_guard.h"
 
-
-static struct region admin_pool;
-
 static int
-admin_dispatch(struct ev_io *coio, struct iobuf *iobuf, lua_State *L)
+admin_dispatch(struct ev_io *coio, struct iobuf *iobuf, struct tbuf *out, lua_State *L)
 {
 	struct ibuf *in = &iobuf->in;
-        struct tbuf *out = tbuf_new(&admin_pool);
 	char *eol;
 	while ((eol = (char *) memchr(in->pos, '\n', in->end - in->pos)) == NULL) {
 		if (coio_bread(coio, in, 1) <= 0)
@@ -94,12 +90,13 @@ admin_handler(va_list ap)
 
 	trigger_run(&session_on_connect, NULL);
 
+        struct tbuf *out = tbuf_new(&iobuf->pool);
 	for (;;) {
-		if (admin_dispatch(&coio, iobuf, L) < 0)
+		if (admin_dispatch(&coio, iobuf, out, L) < 0)
 			return;
 		iobuf_gc(iobuf);
 		fiber_gc();
-                region_reset(&admin_pool);
+                tbuf_reset(out);
 	}
 }
 
@@ -114,6 +111,5 @@ admin_init(const char *bind_ipaddr, int admin_port,
 			  admin_port, admin_handler, NULL);
 	if (on_bind)
 		evio_service_on_bind(&admin.evio_service, on_bind, NULL);
-        region_create(&admin_pool, &cord()->slabc);
 	evio_service_start(&admin.evio_service);
 }

@@ -95,10 +95,7 @@ const char *iproto_request_type_strs[] =
 	"UPDATE",
 	"DELETE",
 	"CALL",
-    "AUTH",
-    "START_TRANS",
-    "COMMIT_TRANS",
-    "ROLLBACK_TRANS"
+        "AUTH"
 };
 
 void

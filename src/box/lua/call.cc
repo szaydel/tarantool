@@ -375,9 +375,7 @@ lbox_start_trans(lua_State *L)
         if (lua_gettop(L) != 0) {
 		return luaL_error(L, "Usage box.begin()");
         }
-	struct request *request = lbox_request_create(L, IPROTO_START_TRANS,
-						      -1, -1);
-	box_process(port_lua_create(L), request);
+	box_start_trans();
 	return lua_gettop(L);
 }
 
@@ -387,10 +385,7 @@ lbox_commit_trans(lua_State *L)
         if (lua_gettop(L) != 0) {
 		return luaL_error(L, "Usage box.commit()");
         }
-        struct request *request = lbox_request_create(L, IPROTO_COMMIT_TRANS,
-                                                              -1, -1);
-        box_process(port_lua_create(L), request);
-
+        box_commit_trans(port_lua_create(L));
 	return lua_gettop(L);
 }
 
@@ -400,10 +395,7 @@ lbox_rollback_trans(lua_State *L)
         if (lua_gettop(L) != 0) {
 		return luaL_error(L, "Usage box.rollback()");
         }
-        struct request *request = lbox_request_create(L, IPROTO_ROLLBACK_TRANS,
-                                                      -1, -1);
-        box_process(port_lua_create(L), request);
-
+        box_rollback_trans();
 	return lua_gettop(L);
 }
 

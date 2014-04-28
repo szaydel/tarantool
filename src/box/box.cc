@@ -78,26 +78,67 @@ void
 port_send_tuple(struct port *port, struct txn *txn)
 {
         txn_request* tr = txn->tail;
-        struct tuple *tuple;
-        if ((tuple = tr->new_tuple) || (tuple = tr->old_tuple)) {
-                port_add_tuple(port, tuple);
+        if (tr != NULL) {
+                struct tuple *tuple;
+                if ((tuple = tr->new_tuple) || (tuple = tr->old_tuple)) {
+                        port_add_tuple(port, tuple);
+                }
+        }
+}
+
+static void on_fiber_reschedule()
+{
+        struct txn * txn = txn_current();
+        if (txn != NULL) {
+                // throwing exception in this place cause abnormal termination of Tarantool
+		//tnt_raise(LoggedError, ER_YIELD_NOT_ALLOWED);
+                txn_current() = NULL;
+                // resetting fiber()->gc() region in rollback cause crash
+                //txn_rollback(txn);
         }
 }
 
 void
-box_commit_trans(struct txn * txn, struct port * port)
+box_start_trans()
 {
-        txn_commit(txn);
-        port_eof(port);
-        txn_finish(txn);
+        struct txn* txn = txn_current();
+        if (txn != NULL && txn->nesting_level != 0) { /* transaction statred for CALL request has nesting_level == 0 */
+                txn->nesting_level += 1;
+        } else {
+                fiber()->on_reschedule_callback = on_fiber_reschedule;
+                txn_current() = txn_begin();
+        }
 }
 
 void
-box_end_request(struct request *request, struct txn * txn, struct port * port)
+box_commit_trans(struct port *port)
 {
-        if (iproto_request_is_update(request->code)) {
-                port_send_tuple(port, txn);
+        struct txn* txn = txn_current();
+        if (txn == NULL) {
+		tnt_raise(LoggedError, ER_NO_ACTIVE_TRANSACTION);
         }
+        if (--txn->nesting_level == 0)  {
+                txn_current() = NULL;
+                try {
+                        txn_commit(txn);
+                        port_eof(port);
+                        txn_finish(txn);
+                } catch (Exception *e) {
+                        txn_rollback(txn);
+                        throw;
+                }
+        }
+}
+
+void
+box_rollback_trans()
+{
+        struct txn* txn = txn_current();
+        if (txn == NULL) {
+		tnt_raise(LoggedError, ER_NO_ACTIVE_TRANSACTION);
+        }
+        txn_current() = NULL;
+        txn_rollback(txn);
 }
 
 static void
@@ -105,18 +146,20 @@ process_rw(struct port *port, struct request *request)
 {
         struct txn *txn = txn_current();
         bool autocommit = false;
-        if (txn == NULL || txn->nesting_level == 0) {
+        if (txn == NULL || txn->nesting_level == 0) { /* transaction statred for CALL request has nesting_level == 0 */
                 txn = txn_begin();
                 autocommit = true;
         }
 	try {
                 stat_collect(stat_base, request->code, 1);
                 request->execute(request, txn, port);
-
-                box_end_request(request, txn, port);
-
-                if (autocommit && txn_current() == NULL) {
-                        box_commit_trans(txn, port);
+                if (iproto_request_is_update(request->code)) {
+                        port_send_tuple(port, txn);
+                }
+                if (autocommit) {
+                        txn_commit(txn);
+                        port_eof(port);
+                        txn_finish(txn);
                 }
 	} catch (Exception *e) {
                 txn_current() = NULL;
@@ -151,8 +194,7 @@ recover_row(void *param __attribute__((unused)),
 	try {
 		assert(packet->bodycnt == 1); /* always 1 for read */
                 if ((packet->flags & (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS)) == (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS)) {
-                        request_create(&request, IPROTO_START_TRANS);
-                        process_rw(&null_port, &request);
+                        box_start_trans();
                 }
 		request_create(&request, packet->code);
 		request_decode(&request, (const char *) packet->body[0].iov_base,
@@ -160,15 +202,13 @@ recover_row(void *param __attribute__((unused)),
 		request.packet = packet;
 		process_rw(&null_port, &request);
                 if ((packet->flags & (WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT)) == WAL_REQ_FLAG_IN_TRANS) {
-                        request_create(&request, IPROTO_COMMIT_TRANS);
-                        process_rw(&null_port, &request);
+                        box_commit_trans(&null_port);
                 }
 	} catch (Exception *e) {
 		e->log();
                 if (packet->flags & WAL_REQ_FLAG_IN_TRANS) {
                         try {
-                                request_create(&request, IPROTO_ROLLBACK_TRANS);
-                                process_rw(&null_port, &request);
+                                box_rollback_trans();
                         } catch (Exception *x) {
                                 x->log();
                         }
