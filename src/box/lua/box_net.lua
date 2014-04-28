@@ -31,7 +31,7 @@ local function rpc_call(r, slf, ...)
         end
     end
 
-    
+
     return r.r:call(path, unpack(args))
 end
 
@@ -80,9 +80,6 @@ box.net = {
         UPDATE = 4,
         DELETE = 5,
         CALL = 6,
-        START_TRANS = 8,
-        COMMIT_TRANS = 9,   
-        ROLLBACK_TRANS = 10,
 
         CODE = 0x00,
         SYNC = 0x01,
@@ -208,18 +205,6 @@ box.net = {
             return result
         end,
 
-        begin = function(self)
-            return box.process(box.net.box.START_TRANS, '')
-        end,
-
-        commit = function(self)
-            return self:process(box.net.box.COMMIT_TRANS, '')
-        end,
-
-        rollback = function(self)
-            return self:process(box.net.box.ROLLBACK_TRANS, '')
-        end,
-
         ping = function(self)
             return self:process(box.net.box.PING, '')
         end,
@@ -269,7 +254,7 @@ box.net = {
 
         -- for compatibility with the networked version,
         -- implement call
-        call = function(self, proc_name, ...) 
+        call = function(self, proc_name, ...)
             local proc = { box.call_loadproc(proc_name) }
             if #proc == 2 then
                 return { proc[1](proc[2], ...) }
@@ -566,7 +551,7 @@ box.net.box.new = function(host, port, reconnect_timeout)
 
     remote.rpc = { r = remote }
     setmetatable(remote.rpc, { __index = rpc_index })
-    
+
     return remote
 
 end
