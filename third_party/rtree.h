@@ -18,6 +18,8 @@ typedef void* record_t;
 #define AREA_MAX (~((area_t)1 << (sizeof(area_t)*8-1)))
 #define AREA_MIN ((area_t)1 << (sizeof(area_t)*8-1))
 
+#define RTREE_PAGE_SIZE 1024 /* R-Tree use linear search within element on the page, so larger page cause worse performance */
+
 class R_tree;
 class R_page;
 class R_tree_iterator;
@@ -181,7 +183,7 @@ class R_page {
     };
     
     enum { 
-        card = (4096-4)/sizeof(branch), // maximal number of branches at page
+        card = (RTREE_PAGE_SIZE-4)/sizeof(branch), // maximal number of branches at page
         min_fill = card/2        // minimal number of branches at non-root page
     };
 
