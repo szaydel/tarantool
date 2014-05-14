@@ -37,6 +37,9 @@
 
 /* XXX: There is no FPOS_MAX.  This assumes fpos_t is an off_t. */
 #define	FPOS_MAX	OFF_MAX
+#ifndef OFF_MAX
+#define OFF_MAX     SSIZE_MAX
+#endif
 
 struct memstream {
 	char **bufp;

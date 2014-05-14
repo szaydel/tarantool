@@ -41,7 +41,9 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Define GNU standard installation directories
-include(GNUInstallDirs)
+if (NOT TARGET_OS_DARWIN)
+    include(GNUInstallDirs)
+endif()
 
 include(cmake/utils.cmake)
 
