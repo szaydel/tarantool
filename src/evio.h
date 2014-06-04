@@ -35,6 +35,7 @@
 #include <stdbool.h>
 #include "tarantool_ev.h"
 #include "sio.h"
+#include "port-uri.h"
 /**
  * Exception-aware way to add a listening socket to the event
  * loop. Callbacks are invoked on bind and accept events.
@@ -64,7 +65,7 @@ struct evio_service
 	char name[SERVICE_NAME_MAXLEN];
 
 	/** Interface/port to bind to */
-	struct sockaddr_in addr;
+	struct port_uri port;
 
 	/** A callback invoked upon a successful bind, optional.
 	 * If on_bind callback throws an exception, it's
@@ -79,7 +80,7 @@ struct evio_service
 	 * accepted socket is closed.
 	 */
 	void (*on_accept)(struct evio_service *, int,
-			  struct sockaddr_in *);
+			  struct sockaddr *, socklen_t);
 	void *on_accept_param;
 
 	/** libev timer object for the bind retry delay. */
@@ -93,9 +94,9 @@ struct evio_service
 void
 evio_service_init(ev_loop *loop,
 		  struct evio_service *service, const char *name,
-		  const char *host, int port,
+		  const char *uri,
 		  void (*on_accept)(struct evio_service *,
-				    int, struct sockaddr_in *),
+				    int, struct sockaddr *, socklen_t),
 		  void *on_accept_param);
 
 /** Set an optional callback to be invoked upon a successful bind. */
@@ -144,7 +145,7 @@ evio_timeout_update(ev_loop *loop, ev_tstamp start, ev_tstamp *delay)
 }
 
 void
-evio_setsockopt_tcp(int fd);
+evio_setsockopt_tcp(int fd, int family);
 
 void
 evio_setsockopt_tcpserver(int fd);

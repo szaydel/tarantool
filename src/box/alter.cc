@@ -38,13 +38,14 @@
 #include <new> /* for placement new */
 #include <stdio.h> /* snprintf() */
 #include <ctype.h>
+#include "cluster.h" /* for cluster_set_uuid() */
 
 /** _space columns */
 #define ID               0
 #define UID              1
 #define NAME             2
 #define ENGINE           3
-#define ARITY            4
+#define FIELD_COUNT      4
 #define FLAGS            5
 /** _index columns */
 #define INDEX_ID         1
@@ -128,7 +129,7 @@ space_def_init_flags(struct space_def *def, struct tuple *tuple)
 	def->temporary = false;
 
 	/* there is no property in the space */
-	if (tuple_arity(tuple) <= FLAGS)
+	if (tuple_field_count(tuple) <= FLAGS)
 		return;
 
 	const char *flags = tuple_field_cstr(tuple, FLAGS);
@@ -152,7 +153,7 @@ space_def_create_from_tuple(struct space_def *def, struct tuple *tuple,
 {
 	def->id = tuple_field_u32(tuple, ID);
 	def->uid = tuple_field_u32(tuple, UID);
-	def->arity = tuple_field_u32(tuple, ARITY);
+	def->field_count = tuple_field_u32(tuple, FIELD_COUNT);
 	int namelen = snprintf(def->name, sizeof(def->name),
 			 "%s", tuple_field_cstr(tuple, NAME));
 	int engine_namelen = snprintf(def->engine_name, sizeof(def->engine_name),
@@ -449,7 +450,7 @@ alter_space_do(struct txn *txn, struct alter_space *alter,
 	       sizeof(alter->old_space->access));
 	/*
 	 * Change the new space: build the new index, rename,
-	 * change arity.
+	 * change the fixed field count.
 	 */
 	rlist_foreach_entry(op, &alter->ops, link)
 		op->alter(alter);
@@ -497,14 +498,14 @@ ModifySpace::prepare(struct alter_space *alter)
 	engine_recovery *recovery =
 		&alter->old_space->engine->recovery;
 
-	if (def.arity != 0 &&
-	    def.arity != alter->old_space->def.arity &&
+	if (def.field_count != 0 &&
+	    def.field_count != alter->old_space->def.field_count &&
 	    recovery->state != READY_NO_KEYS &&
 	    space_size(alter->old_space) > 0) {
 
 		tnt_raise(ClientError, ER_ALTER_SPACE,
 			  (unsigned) def.id,
-			  "can not change arity on a non-empty space");
+			  "can not change field count on a non-empty space");
 	}
 	if (def.temporary != alter->old_space->def.temporary &&
 	    recovery->state != READY_NO_KEYS &&
@@ -596,11 +597,7 @@ DropIndex::commit(struct alter_space *alter)
 	Index *pk = index_find(alter->old_space, 0);
 	if (pk == NULL)
 		return;
-	struct iterator *it = pk->position();
-	pk->initIterator(it, ITER_ALL, NULL, 0);
-	struct tuple *tuple;
-	while ((tuple = it->next(it)))
-		tuple_ref(tuple, -1);
+	alter->old_space->engine->factory->dropIndex(pk);
 }
 
 /** Change non-essential (no data change) properties of an index. */
@@ -943,7 +940,7 @@ static struct trigger drop_space_trigger =
  *
  * 3) modify an existing tuple: some space
  *    properties are immutable, but it's OK to change
- *    space name or arity. This is done in WAL-error-
+ *    space name or field count. This is done in WAL-error-
  *    safe mode.
  *
  * A note about memcached_space: Tarantool 1.4 had a check
@@ -1172,19 +1169,19 @@ user_create_from_tuple(struct user *user, struct tuple *tuple)
 	memset(user, 0, sizeof(*user));
 	user->uid = tuple_field_u32(tuple, ID);
 	const char *name = tuple_field_cstr(tuple, NAME);
-	uint32_t len = strlen(name);
+	uint32_t len = snprintf(user->name, sizeof(user->name), "%s", name);
 	if (len >= sizeof(user->name)) {
 		tnt_raise(ClientError, ER_CREATE_USER,
 			  name, "user name is too long");
 	}
-	snprintf(user->name, sizeof(user->name), "%s", name);
+	identifier_check(name);
 	/*
 	 * AUTH_DATA field in _user space should contain
 	 * chap-sha1 -> base64_encode(sha1(sha1(password)).
 	 * Check for trivial errors when a plain text
 	 * password is saved in this field instead.
 	 */
-	if (tuple_arity(tuple) > AUTH_DATA) {
+	if (tuple_field_count(tuple) > AUTH_DATA) {
 		const char *auth_data = tuple_field(tuple, AUTH_DATA);
 		user_fill_auth_data(user, auth_data);
 	}
@@ -1290,7 +1287,7 @@ func_cache_remove_func(struct trigger * /* trigger */, void *event)
 static struct trigger drop_func_trigger =
 	{ rlist_nil, func_cache_remove_func, NULL, NULL };
 
-/** Remove a function from function cache */
+/** Replace a function in the function cache */
 static void
 func_cache_replace_func(struct trigger * /* trigger */, void *event)
 {
@@ -1503,12 +1500,120 @@ on_replace_dd_priv(struct trigger * /* trigger */, void *event)
 
 /* }}} access control */
 
+/* {{{ cluster configuration */
+
+/**
+ * Parse a tuple field which is expected to contain a string
+ * representation of UUID, and return a 16-byte representation.
+ */
+tt_uuid
+tuple_field_uuid(struct tuple *tuple, int fieldno)
+{
+	const char *value = tuple_field_cstr(tuple, fieldno);
+	tt_uuid uuid;
+	if (tt_uuid_from_string(value, &uuid) != 0)
+		tnt_raise(ClientError, ER_INVALID_UUID, value);
+	return uuid;
+}
+
+/**
+ * This trigger is invoked only upon initial recovery, when
+ * reading contents of the system spaces from the snapshot.
+ *
+ * Before a cluster is assigned a cluster id it's read only.
+ * Since during recovery state of the WAL doesn't
+ * concern us, we can safely change the cluster id in before-replace
+ * event, not in after-replace event.
+ */
+static void
+on_replace_dd_schema(struct trigger * /* trigger */, void *event)
+{
+	struct txn *txn = (struct txn *) event;
+	struct tuple *old_tuple = txn->curr_req()->old_tuple;
+	struct tuple *new_tuple = txn->curr_req()->new_tuple;
+	const char *key = tuple_field_cstr(new_tuple ?
+					   new_tuple : old_tuple, 0);
+	if (strcmp(key, "cluster") == 0) {
+		if (old_tuple != NULL || new_tuple == NULL)
+			tnt_raise(ClientError, ER_CLUSTER_ID_IS_RO);
+		tt_uuid uu = tuple_field_uuid(new_tuple, 1);
+		cluster_set_id(&uu);
+	}
+}
+
+/**
+ * A record with id of the new node has been synced to the
+ * write ahead log. Update the cluster configuration with
+ * a new node.
+ */
+static void
+on_commit_dd_cluster(struct trigger *trigger, void *event)
+{
+	(void) trigger;
+	struct txn *txn = (struct txn *) event;
+        for (txn_request* tr = &txn->req; tr != NULL; tr = tr->next) {
+		uint32_t node_id = tuple_field_u32(tr->new_tuple, 0);
+		tt_uuid node_uuid = tuple_field_uuid(tr->new_tuple, 1);
+
+		cluster_add_node(&node_uuid, node_id);
+	}
+}
+
+static struct trigger commit_cluster_trigger =
+	{ rlist_nil, on_commit_dd_cluster, NULL, NULL };
+
+/**
+ * A trigger invoked on replace in the space _cluster,
+ * which contains cluster configuration.
+ *
+ * This space is modified by JOIN command in IPROTO
+ * protocol.
+ *
+ * The trigger updates the cluster configuration cache
+ * with uuid of the newly joined node.
+ *
+ * During recovery, it acts the same way, loading identifiers
+ * of all nodes into the node cache. Node globally unique
+ * identifiers are used to keep track of cluster configuration,
+ * so that a node that previously joined the cluster can
+ * follow updates, and a node that belongs to a different
+ * cluster can not by mistake join/follow another cluster
+ * without first being reset (emptied).
+ */
+static void
+on_replace_dd_cluster(struct trigger *trigger, void *event)
+{
+	(void) trigger;
+	struct txn *txn = (struct txn *) event;
+ 	struct tuple *old_tuple = txn->curr_req()->old_tuple;
+	struct tuple *new_tuple = txn->curr_req()->new_tuple;
+	if (old_tuple != NULL || new_tuple == NULL)
+		tnt_raise(ClientError, ER_NODE_ID_IS_RO);
+
+	/* Check fields */
+	uint32_t node_id = tuple_field_u32(new_tuple, 0);
+	if (cnode_id_is_reserved(node_id))
+		tnt_raise(ClientError, ER_NODE_ID_IS_RESERVED,
+			  (unsigned) node_id);
+	tt_uuid node_uuid = tuple_field_uuid(new_tuple, 1);
+	if (tt_uuid_is_nil(&node_uuid))
+		tnt_raise(ClientError, ER_INVALID_UUID,
+			  tt_uuid_str(&node_uuid));
+	trigger_set(&txn->on_commit, &commit_cluster_trigger);
+}
+
+/* }}} cluster configuration */
+
 struct trigger alter_space_on_replace_space = {
 	rlist_nil, on_replace_dd_space, NULL, NULL
 };
 
 struct trigger alter_space_on_replace_index = {
 	rlist_nil, on_replace_dd_index, NULL, NULL
+};
+
+struct trigger on_replace_schema = {
+	rlist_nil, on_replace_dd_schema, NULL, NULL
 };
 
 struct trigger on_replace_user = {
@@ -1521,6 +1626,10 @@ struct trigger on_replace_func = {
 
 struct trigger on_replace_priv = {
 	rlist_nil, on_replace_dd_priv, NULL, NULL
+};
+
+struct trigger on_replace_cluster = {
+	rlist_nil, on_replace_dd_cluster, NULL, NULL
 };
 
 /* vim: set foldmethod=marker */

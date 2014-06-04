@@ -1,15 +1,14 @@
-if (TARGET_OS_DARWIN)
-    set(module_link_flags "-pagezero_size 10000 -image_base 100000000")
-endif()
-
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/box/lua)
+
+include_directories(${SOPHIA_INCLUDE_DIR})
 
 set(lua_sources)
 lua_source(lua_sources lua/schema.lua)
-lua_source(lua_sources lua/box.lua)
 lua_source(lua_sources lua/box_net.lua)
 lua_source(lua_sources lua/misc.lua)
 lua_source(lua_sources lua/tuple.lua)
+set(bin_sources)
+bin_source(bin_sources bootstrap.snap bootstrap.h)
 
 add_custom_target(box_generate_lua_sources
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/src/box
@@ -27,6 +26,8 @@ add_library(box
     bitset_index.cc
     engine.cc
     engine_memtx.cc
+    engine_sophia.cc
+    sophia_index.cc
     space.cc
     alter.cc
     schema.cc
@@ -36,10 +37,18 @@ add_library(box
     box.cc
     access.cc
     authentication.cc
+    vclock.cc
+    cluster.cc
+    log_io.cc
+    recovery.cc
+    replica.cc
+    replication.cc
     ${lua_sources}
     lua/call.cc
     lua/tuple.cc
     lua/slab.cc
     lua/index.cc
-    lua/space.cc)
-
+    lua/space.cc
+    lua/info.cc
+    lua/stat.cc
+    ${bin_sources})

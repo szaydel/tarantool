@@ -82,10 +82,9 @@ coio_fiber_yield_timeout(struct ev_io *coio, ev_tstamp delay)
  * Connect to a host.
  */
 void
-coio_connect(struct ev_io *coio, struct sockaddr_in *addr)
+coio_connect(struct ev_io *coio, struct sockaddr *addr, socklen_t addr_len)
 {
-	coio_connect_timeout(coio, addr, sizeof(*addr),
-			     TIMEOUT_INFINITY);
+	coio_connect_timeout(coio, addr, addr_len, TIMEOUT_INFINITY);
 }
 
 /**
@@ -94,7 +93,7 @@ coio_connect(struct ev_io *coio, struct sockaddr_in *addr)
  * @retval false connected
  */
 bool
-coio_connect_timeout(struct ev_io *coio, struct sockaddr_in *addr,
+coio_connect_timeout(struct ev_io *coio, struct sockaddr *addr,
 		     socklen_t len, ev_tstamp timeout)
 {
 	if (sio_connect(coio->fd, addr, len) == 0)
@@ -145,13 +144,12 @@ coio_connect_addrinfo(struct ev_io *coio, struct addrinfo *ai,
 	assert(! evio_is_active(coio));
 	bool res = true;
 	while (ai) {
-		struct sockaddr_in *addr = (struct sockaddr_in *)ai->ai_addr;
 		try {
 			evio_socket(coio, ai->ai_family,
 				    ai->ai_socktype,
 				    ai->ai_protocol);
-			res = coio_connect_timeout(coio, addr, ai->ai_addrlen,
-						   delay);
+			res = coio_connect_timeout(coio, ai->ai_addr,
+					ai->ai_addrlen, delay);
 			if (res)
 				evio_close(loop, coio);
 			return res;
@@ -174,7 +172,7 @@ coio_connect_addrinfo(struct ev_io *coio, struct addrinfo *ai,
  * timedout.
  */
 int
-coio_accept(struct ev_io *coio, struct sockaddr_in *addr,
+coio_accept(struct ev_io *coio, struct sockaddr *addr,
 	    socklen_t addrlen, ev_tstamp timeout)
 {
 	ev_tstamp start, delay;
@@ -187,7 +185,7 @@ coio_accept(struct ev_io *coio, struct sockaddr_in *addr,
 		 * available */
 		int fd = sio_accept(coio->fd, addr, &addrlen);
 		if (fd >= 0) {
-			evio_setsockopt_tcp(fd);
+			evio_setsockopt_tcp(fd, addr->sa_family);
 			return fd;
 		}
 		/* The socket is not ready, yield */
@@ -433,7 +431,7 @@ coio_writev(struct ev_io *coio, struct iovec *iov, int iovcnt,
  */
 ssize_t
 coio_sendto_timeout(struct ev_io *coio, const void *buf, size_t sz, int flags,
-		    const struct sockaddr_in *dest_addr, socklen_t addrlen,
+		    const struct sockaddr *dest_addr, socklen_t addrlen,
 		    ev_tstamp timeout)
 {
 	ev_tstamp start, delay;
@@ -479,7 +477,7 @@ coio_sendto_timeout(struct ev_io *coio, const void *buf, size_t sz, int flags,
  */
 ssize_t
 coio_recvfrom_timeout(struct ev_io *coio, void *buf, size_t sz, int flags,
-		      struct sockaddr_in *src_addr, socklen_t addrlen,
+		      struct sockaddr *src_addr, socklen_t addrlen,
 		      ev_tstamp timeout)
 {
 	ev_tstamp start, delay;
@@ -519,7 +517,7 @@ coio_recvfrom_timeout(struct ev_io *coio, void *buf, size_t sz, int flags,
 
 void
 coio_service_on_accept(struct evio_service *evio_service,
-		       int fd, struct sockaddr_in *addr)
+		       int fd, struct sockaddr *addr, socklen_t addrlen)
 {
 	struct coio_service *service = (struct coio_service *)
 			evio_service->on_accept_param;
@@ -559,14 +557,15 @@ coio_service_on_accept(struct evio_service *evio_service,
 	 * and will have to close it and free before termination.
 	 */
 	fiber_call(f, coio, addr, iobuf, service->handler_param);
+	(void)addrlen;
 }
 
 void
 coio_service_init(struct coio_service *service, const char *name,
-		  const char *host, int port,
+		  const char *uri,
 		  void (*handler)(va_list ap), void *handler_param)
 {
-	evio_service_init(loop(), &service->evio_service, name, host, port,
+	evio_service_init(loop(), &service->evio_service, name, uri,
 			  coio_service_on_accept, service);
 	service->handler = handler;
 	service->handler_param = handler_param;

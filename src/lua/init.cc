@@ -31,7 +31,7 @@
 #include "tarantool.h"
 #include "box/box.h"
 #include "tbuf.h"
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__) || defined(__APPLE__)
 #include "libgen.h"
 #endif
 
@@ -44,14 +44,14 @@ extern "C" {
 
 
 #include <fiber.h>
+#include <session.h>
 #include "coeio.h"
 #include "lua/fiber.h"
-#include "lua/admin.h"
 #include "lua/errinj.h"
 #include "lua/ipc.h"
+#include "lua/errno.h"
 #include "lua/socket.h"
-#include "lua/info.h"
-#include "lua/stat.h"
+#include "lua/bsdsocket.h"
 #include "lua/session.h"
 #include "lua/cjson.h"
 #include "lua/yaml.h"
@@ -68,19 +68,18 @@ struct lua_State *tarantool_L;
 
 /* contents of src/lua/ files */
 extern char uuid_lua[], session_lua[], msgpackffi_lua[], fun_lua[],
-       load_cfg_lua[], interactive_lua[];
-static const char *lua_sources[] = { uuid_lua, session_lua,
-	load_cfg_lua, interactive_lua, NULL };
-static const char *lua_modules[] = { "msgpackffi", msgpackffi_lua,
-	"fun", fun_lua, NULL };
-
+       load_cfg_lua[], interactive_lua[], digest_lua[], init_lua[],
+       log_lua[];
 static struct region buf_reg;
+static const char *lua_sources[] = { init_lua, session_lua, load_cfg_lua, NULL };
+static const char *lua_modules[] = { "msgpackffi", msgpackffi_lua,
+	"fun", fun_lua, "digest", digest_lua,
+	"interactive", interactive_lua,
+	"uuid", uuid_lua, "log", log_lua, NULL };
 
 /*
  * {{{ box Lua library: common functions
  */
-
-const char *boxlib_name = "box";
 
 uint64_t
 tarantool_lua_tointeger64(struct lua_State *L, int idx)
@@ -120,31 +119,6 @@ tarantool_lua_tointeger64(struct lua_State *L, int idx)
 	return result;
 }
 
-/** Report libev time (cheap). */
-static int
-lbox_time(struct lua_State *L)
-{
-	lua_pushnumber(L, ev_now(loop()));
-	return 1;
-}
-
-/** Report libev time as 64-bit integer */
-static int
-lbox_time64(struct lua_State *L)
-{
-	luaL_pushnumber64(L, (uint64_t) ( ev_now(loop()) * 1000000 + 0.5 ) );
-	return 1;
-}
-
-/**
- * descriptor for box methods
- */
-static const struct luaL_reg boxlib[] = {
-	{"time", lbox_time},
-	{"time64", lbox_time64},
-	{NULL, NULL}
-};
-
 const char *
 tarantool_lua_tostring(struct lua_State *L, int index)
 {
@@ -160,41 +134,6 @@ tarantool_lua_tostring(struct lua_State *L, int index)
 }
 
 /**
- * Redefine lua 'pcall' built-in to correctly handle exceptions,
- * produced by 'box' C functions.
- *
- * See Lua documentation on 'pcall' for additional information.
- */
-static int
-lbox_pcall(struct lua_State *L)
-{
-	/*
-	 * Lua pcall() returns true/false for completion status
-	 * plus whatever the called function returns.
-	 */
-	try {
-		lbox_call(L, lua_gettop(L) - 1, LUA_MULTRET);
-		/* push completion status */
-		lua_pushboolean(L, true);
-		/* move 'true' to stack start */
-		lua_insert(L, 1);
-	} catch (ClientError *e) {
-		/*
-		 * Note: FiberCancelException passes through this
-		 * catch and thus leaves garbage on coroutine
-		 * stack.
-		 */
-		/* pop any possible garbage */
-		lua_settop(L, 0);
-		/* completion status */
-		lua_pushboolean(L, false);
-		/* error message */
-		lua_pushstring(L, e->errmsg());
-	}
-	return lua_gettop(L);
-}
-
-/**
  * Convert lua number or string to lua cdata 64bit number.
  */
 static int
@@ -204,6 +143,14 @@ lbox_tonumber64(struct lua_State *L)
 		luaL_error(L, "tonumber64: wrong number of arguments");
 	uint64_t result = tarantool_lua_tointeger64(L, 1);
 	return luaL_pushnumber64(L, result);
+}
+
+static int
+lbox_coredump(struct lua_State *L __attribute__((unused)))
+{
+	coredump(60);
+	lua_pushstring(L, "ok");
+	return 1;
 }
 
 static const struct luaL_reg errorlib [] = {
@@ -263,11 +210,12 @@ tarantool_lua_setpath(struct lua_State *L, const char *type, ...)
 }
 
 void
-tarantool_lua_init()
+tarantool_lua_init(const char *tarantool_bin, int argc, char **argv)
 {
 	lua_State *L = luaL_newstate();
-	if (L == NULL)
-		return;
+	if (L == NULL) {
+		panic("failed to initialize Lua");
+	}
 	luaL_openlibs(L);
 	/*
 	 * Search for Lua modules, apart from the standard
@@ -278,21 +226,17 @@ tarantool_lua_init()
 	tarantool_lua_setpath(L, "path", MODULE_LUAPATH, NULL);
 	tarantool_lua_setpath(L, "cpath", MODULE_LIBPATH, NULL);
 
-	luaL_register(L, boxlib_name, boxlib);
-	lua_pop(L, 1);
-
-	lua_register(L, "pcall", lbox_pcall);
 	lua_register(L, "tonumber64", lbox_tonumber64);
+	lua_register(L, "coredump", lbox_coredump);
 
 	tarantool_lua_errinj_init(L);
 	tarantool_lua_fiber_init(L);
-	tarantool_lua_admin_init(L);
 	tarantool_lua_cjson_init(L);
 	tarantool_lua_yaml_init(L);
-	tarantool_lua_info_init(L);
-	tarantool_lua_stat_init(L);
 	tarantool_lua_ipc_init(L);
+	tarantool_lua_errno_init(L);
 	tarantool_lua_socket_init(L);
+	tarantool_lua_bsdsocket_init(L);
 	tarantool_lua_session_init(L);
 	tarantool_lua_error_init(L);
 	luaopen_msgpack(L);
@@ -321,6 +265,18 @@ tarantool_lua_init()
 	}
 
 	box_lua_init(L);
+
+
+	lua_newtable(L);
+	lua_pushinteger(L, -1);
+	lua_pushstring(L, tarantool_bin);
+	lua_settable(L, -3);
+	for (int i = 0; i < argc; i++) {
+		lua_pushinteger(L, i);
+		lua_pushstring(L, argv[i]);
+		lua_settable(L, -3);
+	}
+	lua_setfield(L, LUA_GLOBALSINDEX, "arg");
 
 	/* clear possible left-overs of init */
 	lua_settop(L, 0);
@@ -458,6 +414,13 @@ tarantool_lua_interactive()
         region_destroy(&buf_reg);
 }
 
+extern "C" const char *
+tarantool_error_message(void)
+{
+	assert(cord()->exception != NULL); /* called only from error handler */
+	return cord()->exception->errmsg();
+}
+
 /**
  * Execute start-up script.
  */
@@ -466,7 +429,6 @@ run_script(va_list ap)
 {
 	struct lua_State *L = va_arg(ap, struct lua_State *);
 	const char *path = va_arg(ap, const char *);
-        SessionGuard session_guard(-1, 0);
 
 	/*
 	 * Return control to tarantool_lua_run_script.
@@ -475,18 +437,25 @@ run_script(va_list ap)
 	 */
 	fiber_sleep(0.0);
 
+	/* Create session with ADMIN privileges for interactive mode */
+	SessionGuard session_guard(0, 0);
+
 	if (access(path, F_OK) == 0) {
-		say_info("loading %s", path);
 		/* Execute the init file. */
 		lua_getglobal(L, "dofile");
 		lua_pushstring(L, path);
 	} else {
 		say_crit("version %s", tarantool_version());
-		lua_getglobal(L, "interactive");
+		/* get iteractive from package.loaded */
+		lua_getfield(L, LUA_REGISTRYINDEX, "_LOADED");
+		lua_getfield(L, -1, "interactive");
+		lua_remove(L, -2); /* remove package.loaded */
 	}
-	lbox_pcall(L);
-	if (! lua_toboolean(L, 1))
-		panic("%s", lua_tostring(L, -1));
+	try {
+		lbox_call(L, lua_gettop(L) - 1, 0);
+	} catch (ClientError *e) {
+		panic("%s", e->errmsg());
+	}
 
 	/* clear the stack from return values. */
 	lua_settop(L, 0);

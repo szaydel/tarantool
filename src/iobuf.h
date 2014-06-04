@@ -39,7 +39,7 @@ struct ev_io;
 /** {{{ Input buffer.
  *
  * Continuous piece of memory to store input.
- * Allocated in factors of 'readahead'.
+ * Allocated in factors of 'iobuf_readahead'.
  * Maintains position of the data "to be processed".
  *
  * Typical use case:
@@ -226,7 +226,7 @@ iobuf_flush(struct iobuf *iobuf, struct ev_io *coio);
  * Is automatically called by iobuf_flush().
  */
 void
-iobuf_gc(struct iobuf *iobuf);
+iobuf_reset(struct iobuf *iobuf);
 
 /** Return true if there is no input and no output. */
 static inline bool
@@ -235,14 +235,11 @@ iobuf_is_idle(struct iobuf *iobuf)
 	return ibuf_size(&iobuf->in) == 0 && obuf_size(&iobuf->out) == 0;
 }
 
-/**
- * Network readahead. A signed integer to avoid
- * automatic type coercion to an unsigned type.
- */
-extern int cfg_readahead;
+void
+iobuf_init();
 
 void
-iobuf_init(int readahead);
+iobuf_set_readahead(int readahead);
 
 /* }}} */
 

@@ -126,27 +126,27 @@ lbox_tuple_slice(struct lua_State *L)
 	if (argc == 0 || argc > 2)
 		luaL_error(L, "tuple.slice(): bad arguments");
 
-	uint32_t arity = tuple_arity(tuple);
+	uint32_t field_count = tuple_field_count(tuple);
 	offset = lua_tointeger(L, 2);
-	if (offset >= 0 && offset < arity) {
+	if (offset >= 0 && offset < field_count) {
 		start = offset;
-	} else if (offset < 0 && -offset <= arity) {
-		start = offset + arity;
+	} else if (offset < 0 && -offset <= field_count) {
+		start = offset + field_count;
 	} else {
 		return luaL_error(L, "tuple.slice(): start >= field count");
 	}
 
 	if (argc == 2) {
 		offset = lua_tointeger(L, 3);
-		if (offset > 0 && offset <= arity) {
+		if (offset > 0 && offset <= field_count) {
 			end = offset;
-		} else if (offset < 0 && -offset < arity) {
-			end = offset + arity;
+		} else if (offset < 0 && -offset < field_count) {
+			end = offset + field_count;
 		} else {
 			return luaL_error(L, "tuple.slice(): end > field count");
 		}
 	} else {
-		end = arity;
+		end = field_count;
 	}
 	if (end <= start)
 		return luaL_error(L, "tuple.slice(): start must be less than end");
@@ -155,7 +155,7 @@ lbox_tuple_slice(struct lua_State *L)
 	tuple_rewind(&it, tuple);
 	const char *field;
 
-	assert(start < arity);
+	assert(start < field_count);
 	uint32_t field_no = start;
 	field = tuple_seek(&it, start);
 	while (field && field_no < end) {
@@ -227,29 +227,29 @@ lbox_tuple_transform(struct lua_State *L)
 	if (argc < 3)
 		luaL_error(L, "tuple.transform(): bad arguments");
 	lua_Integer offset = lua_tointeger(L, 2);  /* Can be negative and can be > INT_MAX */
-	lua_Integer field_count = lua_tointeger(L, 3);
+	lua_Integer len = lua_tointeger(L, 3);
 
-	uint32_t arity = tuple_arity(tuple);
+	uint32_t field_count = tuple_field_count(tuple);
 	/* validate offset and len */
 	if (offset < 0) {
-		if (-offset > arity)
+		if (-offset > field_count)
 			luaL_error(L, "tuple.transform(): offset is out of bound");
-		offset += arity;
-	} else if (offset > arity) {
-		offset = arity;
+		offset += field_count;
+	} else if (offset > field_count) {
+		offset = field_count;
 	}
-	if (field_count < 0)
+	if (len < 0)
 		luaL_error(L, "tuple.transform(): len is negative");
-	if (field_count > arity - offset)
-		field_count = arity - offset;
+	if (len > field_count - offset)
+		len = field_count - offset;
 
-	assert(offset + field_count <= arity);
+	assert(offset + len <= field_count);
 
 	/*
 	 * Calculate the number of operations and length of UPDATE expression
 	 */
 	uint32_t op_cnt = 0;
-	if (offset < arity && field_count > 0)
+	if (offset < field_count && len > 0)
 		op_cnt++;
 	if (argc > 3)
 		op_cnt += argc - 3;
@@ -265,11 +265,11 @@ lbox_tuple_transform(struct lua_State *L)
 	 */
 	struct tbuf *b = tbuf_new(&fiber()->gc);
 	luamp_encode_array(b, op_cnt);
-	if (field_count > 0) {
+	if (len > 0) {
 		luamp_encode_array(b, 3);
 		luamp_encode_str(b, "#", 1);
 		luamp_encode_uint(b, offset);
-		luamp_encode_uint(b, field_count);
+		luamp_encode_uint(b, len);
 	}
 
 	for (int i = argc ; i > 3; i--) {
@@ -286,90 +286,6 @@ lbox_tuple_transform(struct lua_State *L)
 					       tuple, tbuf_str(b), tbuf_end(b));
 	lbox_pushtuple(L, new_tuple);
 	return 1;
-}
-
-/*
- * Tuple find function.
- *
- * Find each or one tuple field according to the specified key.
- *
- * Function returns indexes of the tuple fields that match
- * key criteria.
- *
- */
-static int
-lbox_tuple_find_do(struct lua_State *L, bool all)
-{
-	struct tuple *tuple = lua_checktuple(L, 1);
-	int argc = lua_gettop(L);
-	size_t offset = 0;
-	switch (argc - 1) {
-	case 1: break;
-	case 2:
-		offset = lua_tointeger(L, 2);
-		break;
-	default:
-		luaL_error(L, "tuple.find(): bad arguments");
-	}
-
-	int top = lua_gettop(L);
-	int idx = offset;
-
-	struct luaL_field arg;
-	luaL_checkfield(L, 2, &arg);
-	struct tuple_iterator it;
-	tuple_rewind(&it, tuple);
-	const char *field = tuple_seek(&it, idx);
-	for (; field; field = tuple_next(&it), idx++) {
-		bool found = false;
-		const char *f = field;
-		if (arg.type != mp_typeof(*field))
-			continue;
-
-		switch (arg.type) {
-		case MP_UINT:
-			found = (arg.ival == mp_decode_uint(&f));
-			break;
-		case MP_INT:
-			found = (arg.ival == mp_decode_int(&f));
-			break;
-		case MP_BOOL:
-			found = (arg.bval == mp_decode_bool(&f));
-			break;
-		case MP_DOUBLE:
-			found = (arg.bval == mp_decode_double(&f));
-			break;
-		case MP_STR:
-		{
-			uint32_t len1 = 0;
-			const char *s1 = mp_decode_str(&f, &len1);
-			size_t len2 = arg.sval.len;
-			const char *s2 = arg.sval.data;
-			found = (len1 == len2) && (memcmp(s1, s2, len1) == 0);
-			break;
-		}
-		default:
-			break;
-		}
-		if (found) {
-			lua_pushinteger(L, idx);
-			if (!all)
-				break;
-		}
-	}
-	return lua_gettop(L) - top;
-}
-
-static int
-lbox_tuple_find(struct lua_State *L)
-{
-	return lbox_tuple_find_do(L, false);
-}
-
-static int
-lbox_tuple_findall(struct lua_State *L)
-{
-	return lbox_tuple_find_do(L, true);
 }
 
 void
@@ -392,8 +308,6 @@ static const struct luaL_reg lbox_tuple_meta[] = {
 	{"__gc", lbox_tuple_gc},
 	{"slice", lbox_tuple_slice},
 	{"transform", lbox_tuple_transform},
-	{"find", lbox_tuple_find},
-	{"findall", lbox_tuple_findall},
 	{NULL, NULL}
 };
 

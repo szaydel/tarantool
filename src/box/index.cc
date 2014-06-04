@@ -27,6 +27,11 @@
  * SUCH DAMAGE.
  */
 #include "index.h"
+#include "hash_index.h"
+#include "tree_index.h"
+#include "bitset_index.h"
+#include "sophia_index.h"
+#include "tuple.h"
 #include "say.h"
 #include "exception.h"
 
@@ -46,7 +51,7 @@ key_validate_parts(struct key_def *key_def, const char *key,
 		mp_next(&key);
 
 		key_mp_type_validate(key_def->parts[part].type, mp_type,
-				     ER_KEY_FIELD_TYPE, part);
+				     ER_KEY_PART_TYPE, part);
 	}
 }
 

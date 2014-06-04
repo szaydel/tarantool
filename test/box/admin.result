@@ -11,16 +11,19 @@ space:create_index('primary', { type = 'hash' })
 box.stat()
 ---
 - DELETE:
-    total: 0
-    rps: 0
+    total: 35
+    rps: 7
   SELECT:
     total: 1
     rps: 0
   REPLACE:
-    total: 0
+    total: 2
     rps: 0
   INSERT:
-    total: 2
+    total: 35
+    rps: 7
+  AUTH:
+    total: 0
     rps: 0
   AUTH:
     total: 0
@@ -48,41 +51,42 @@ help()
 ...
 box.cfg
 ---
-- pid_file: tarantool.pid
+- too_long_threshold: 0.5
   slab_alloc_factor: 2
-  slab_alloc_minimal: 64
+  rows_per_wal: 50
   admin_port: <number>
-  primary_port: <number>
+  slab_alloc_arena: 0.1
   wal_dir: .
   logger_nonblock: true
   transaction_limit: 0
   coredump: false
-  snap_dir: .
-  log_level: 5
   wal_mode: write
-  background: false
+  log_level: 5
   panic_on_snap_error: true
   panic_on_wal_error: false
-  rows_per_wal: 50
-  slab_alloc_arena: 0.1
-  bind_ipaddr: INADDR_ANY
   readahead: 16320
-  too_long_threshold: 0.5
+  primary_port: <number>
+  pid_file: tarantool.pid
+  slab_alloc_minimal: 64
+  background: false
   wal_dir_rescan_delay: 0.1
 ...
 box.stat()
 ---
 - DELETE:
-    total: 0
-    rps: 0
+    total: 35
+    rps: 7
   SELECT:
     total: 1
     rps: 0
   REPLACE:
-    total: 0
+    total: 2
     rps: 0
   INSERT:
-    total: 2
+    total: 35
+    rps: 7
+  AUTH:
+    total: 0
     rps: 0
   AUTH:
     total: 0
@@ -119,10 +123,10 @@ function test_box_info()
     local buildstr = {'flags', 'target', 'compiler', 'options'}
     local str = {'version', 'status' }
     local failed = {}
-    if check_type(tmp.lsn, 'cdata') == false then
-        table.insert(failed1, 'box.info().lsn')
+    if check_type(tmp.node, 'table') == false then
+        table.insert(failed1, 'box.info().node')
     else
-        tmp.lsn = nil
+        tmp.node = nil
     end
     for k, v in ipairs(num) do
         if check_type(tmp[v], 'number') == false then
@@ -218,7 +222,7 @@ function test_fiber(tbl)
     local num = {'fid', 'csw'}
     for k, v in ipairs(num) do
         if check_type(tmp[v], 'number') == false then
-            table.insert(failed, 'box.fiber.info().<fiber_name>.'..v)
+            table.insert(failed, "require('fiber').info().<fiber_name>."..v)
         else
             tmp[v] = nil
         end
@@ -237,7 +241,7 @@ end;
 ---
 ...
 function test_box_fiber_info()
-    local tmp = box.fiber.info()
+    local tmp = require('fiber').info()
     local failed = {}
     for name, tbl in ipairs(tmp) do
         local bl, fld = test_fiber(tbl)
@@ -250,9 +254,9 @@ function test_box_fiber_info()
         end
     end
     if #tmp > 0 or #failed > 0 then
-        return "box.fiber.info is not ok. failed: ", tmp, failed
+        return "require('fiber').info is not ok. failed: ", tmp, failed
     else
-        return "box.fiber.info() is ok"
+        return "require('fiber').info() is ok"
     end
 end;
 ---
@@ -267,7 +271,7 @@ test_box_slab_info();
 ...
 test_box_fiber_info();
 ---
-- box.fiber.info() is ok
+- require('fiber').info() is ok
 ...
 space:drop();
 ---

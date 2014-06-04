@@ -415,6 +415,6 @@ luaopen_msgpack(lua_State *L)
 		{ NULL, NULL}
 	};
 
-	luaL_openlib(L, "msgpack", msgpacklib, 0);
+	luaL_register_module(L, "msgpack", msgpacklib);
 	return 1;
 }

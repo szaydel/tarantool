@@ -3,6 +3,10 @@
 
 #include <stdio.h>
 
+#if defined(__cplusplus)
+extern "C" {
+#endif /* defined(__cplusplus) */
+
 /**
 @brief example
 
@@ -27,7 +31,7 @@ int _ok(int condition, const char *fmt, ...);
 /* private function, use note(...) or diag(...) instead */
 void _space(FILE *stream);
 
-#define msg(stream, ...) ({ __space(stream); fprintf(stream, "# ");            \
+#define msg(stream, ...) ({ _space(stream); fprintf(stream, "# ");            \
 	fprintf(stream, __VA_ARGS__); fprintf(stream, "\n"); })
 
 #define note(...) msg(stdout, __VA_ARGS__)
@@ -89,6 +93,10 @@ int check_plan(void);
 #define fail(fmt, args...)		\
 	ok(0, fmt, ##args)
 
+
+#if defined(__cplusplus)
+}
+#endif /* defined(__cplusplus) */
 
 #endif /* TARANTOOL_TEST_H_INCLUDED */
 

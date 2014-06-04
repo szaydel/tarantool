@@ -30,7 +30,6 @@
  */
 #include "trivia/util.h"
 #include "key_def.h" /* for enum field_type */
-#include <pickle.h>
 
 enum { FORMAT_ID_MAX = UINT16_MAX - 1, FORMAT_ID_NIL = UINT16_MAX };
 
@@ -207,7 +206,7 @@ tuple_format(const struct tuple *tuple)
  * @return the number of fields in tuple
  */
 extern "C" inline uint32_t
-tuple_arity(const struct tuple *tuple)
+tuple_field_count(const struct tuple *tuple)
 {
 	const char *data = tuple->data;
 	return mp_decode_array(&data);
@@ -390,6 +389,19 @@ tuple_update(struct tuple_format *new_format,
 	     void *(*region_alloc)(void *, size_t), void *alloc_ctx,
 	     const struct tuple *old_tuple,
 	     const char *expr, const char *expr_end);
+
+/**
+ * @brief Compare two tuple fields using using field type definition
+ * @param field_a field
+ * @param field_b field
+ * @param field_type field type definition
+ * @retval 0  if field_a == field_b
+ * @retval <0 if field_a < field_b
+ * @retval >0 if field_a > field_b
+ */
+int
+tuple_compare_field(const char *field_a, const char *field_b,
+		    enum field_type type);
 
 /**
  * @brief Compare two tuples using field by field using key definition

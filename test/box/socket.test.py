@@ -4,14 +4,15 @@ import socket
 
 ########################
 #                      #
-# box.socket.tcp/udp() #
+# socket.tcp/udp()     #
 #                      #
 ########################
 
-admin("s = box.socket.udp()")
+admin("socket = require('socket')")
+admin("s = socket.udp()")
 admin("type(s)")
 admin("s:close()")
-admin("s = box.socket.tcp()")
+admin("s = socket.tcp()")
 admin("type(s)")
 
 ### socket:close()
@@ -73,7 +74,7 @@ s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 s.bind(('localhost', 30303))
 s.listen(1)
 
-admin("s = box.socket.tcp()")
+admin("s = socket.tcp()")
 admin("type(s:connect('127.0.0.1', '30303'))")
 admin("s:send('ping')")
 admin("s:error()")
@@ -467,7 +468,7 @@ s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 s.bind(('localhost', 30302))
 
 # SOCK_DGRAM
-admin("s = box.socket.udp()")
+admin("s = socket.udp()")
 admin("type(s:sendto('ping', '127.0.0.1', '30302'))")
 admin("s:error()")
 
@@ -485,7 +486,7 @@ admin("s:close()")
 # connect from test to echo server implemented in
 # stored procedure and do send/recv.
 #
-admin("s = box.socket.udp()")
+admin("s = socket.udp()")
 admin("type(s:bind('127.0.0.1', '30301'))")
 admin("s:error()")
 
@@ -511,14 +512,13 @@ admin("s:close()")
 #
 test="""
 replies = 0
-packet = msgpack.encode({[0] = 64, [1] = 0})
-packet = msgpack.encode(packet:len())..packet
+packet = require('msgpack').encode({[0] = 64, [1] = 0})
+packet = require('msgpack').encode(packet:len())..packet
 function bug1160869()
-    local s = box.socket.tcp()
-    s:connect('127.0.0.1', box.cfg.primary_port)
+    local s = socket.tcp()
+    s:connect('127.0.0.1', string.gsub(box.cfg.primary_port, '^.*:', ''))
     s:recv(128)
-    box.fiber.resume( box.fiber.create(function()
-        box.fiber.detach()
+    require('fiber').wrap(function()
         while true do
             _, status =  s:recv(18)
             if status == "eof" then
@@ -526,7 +526,7 @@ function bug1160869()
             end
             replies = replies + 1
         end
-    end) )
+    end)
     return s:send(packet)
 end
 """
@@ -535,24 +535,23 @@ admin("bug1160869()")
 admin("bug1160869()")
 admin("bug1160869()")
 # Due to delays in event loop the value can be not updated
-admin("wait_cout = 100 while replies ~= 3 and wait_cout > 0 do box.fiber.sleep(0.001) wait_cout = wait_cout - 1 end")
+admin("wait_cout = 100 while replies ~= 3 and wait_cout > 0 do require('fiber').sleep(0.001) wait_cout = wait_cout - 1 end")
 admin("replies")
 
 test="""
 s = nil
 syncno = 0
 reps = 0
-packet = msgpack.encode({[0] = 64, [1] = 0})
-packet = msgpack.encode(packet:len())..packet
+packet = require('msgpack').encode({[0] = 64, [1] = 0})
+packet = require('msgpack').encode(packet:len())..packet
 function iostart()
     if s ~= nil then
         return
     end
-    s = box.socket.tcp()
-    s:connect('127.0.0.1', box.cfg.primary_port)
+    s = socket.tcp()
+    s:connect('127.0.0.1', string.gsub(box.cfg.primary_port, '^.*:', ''))
     s:recv(128)
-    box.fiber.resume( box.fiber.create(function()
-        box.fiber.detach()
+    require('fiber').wrap(function()
         while true do
             s:recv(18)
             if status == "eof" then
@@ -560,14 +559,14 @@ function iostart()
             end
             reps = reps + 1
         end
-    end))
+    end)
 end
 
 function iotest()
     iostart()
     syncno = syncno + 1
-    packet = msgpack.encode({[0] = 64, [1] = syncno})
-    packet = msgpack.encode(packet:len())..packet
+    packet = require('msgpack').encode({[0] = 64, [1] = syncno})
+    packet = require('msgpack').encode(packet:len())..packet
     return s:send(packet)
 end
 """
@@ -576,7 +575,7 @@ admin("iotest()")
 admin("iotest()")
 admin("iotest()")
 # Due to delays in event loop the value can be not updated
-admin("wait_cout = 100 while reps ~= 3 and wait_cout > 0 do box.fiber.sleep(0.001) wait_cout = wait_cout - 1 end")
+admin("wait_cout = 100 while reps ~= 3 and wait_cout > 0 do require('fiber').sleep(0.001) wait_cout = wait_cout - 1 end")
 admin("reps")
 
 # Bug #43: incorrect box:shutdown() arg handling
@@ -584,7 +583,7 @@ admin("reps")
 #
 test="""
 function server()
-    ms = box.socket.tcp()
+    ms = socket.tcp()
     ms:bind('127.0.0.1', 8181)
     ms:listen()
     test_listen_done = true
@@ -594,17 +593,17 @@ function server()
         if s ~= 'timeout' then
             print("accepted connection ", s)
             s:send('Hello world')
-            s:shutdown(box.socket.SHUT_RDWR)
+            s:shutdown(socket.SHUT_RDWR)
         end
     end
 end
 
-fbr = box.fiber.wrap(server)
+fbr = require('fiber').wrap(server)
 """
 admin("test_listen_done = false")
 admin(test.replace('\n', ' '))
 # Due to delays in event loop the value can be not updated
-admin("wait_cout = 100 while not test_listen_done and wait_cout > 0 do box.fiber.sleep(0.001) wait_cout = wait_cout - 1 end")
+admin("wait_cout = 100 while not test_listen_done and wait_cout > 0 do require('fiber').sleep(0.001) wait_cout = wait_cout - 1 end")
 
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

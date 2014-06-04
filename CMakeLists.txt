@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 2.8)
 
 project(tarantool C CXX)
 
@@ -77,7 +77,7 @@ if (HAVE_SENDFILE)
     endif()
 endif()
 check_function_exists(open_memstream HAVE_OPEN_MEMSTREAM)
-
+check_function_exists(fmemopen HAVE_FMEMOPEN)
 check_function_exists(funopen HAVE_FUNOPEN)
 
 #
@@ -97,7 +97,7 @@ add_custom_target(tags COMMAND ctags -R -f tags
 #
 set (CPACK_PACKAGE_VERSION_MAJOR "1")
 set (CPACK_PACKAGE_VERSION_MINOR "6")
-set (CPACK_PACKAGE_VERSION_PATCH "1")
+set (CPACK_PACKAGE_VERSION_PATCH "2")
 
 set (PACKAGE_VERSION "")
 
@@ -146,17 +146,32 @@ include_directories(${PROJECT_SOURCE_DIR})
 #
 # Specify Tarantool modules prefixes
 #
-set(MODULE_SUFFIX "tarantool/${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}")
-set(MODULE_LIBDIR "${CMAKE_INSTALL_FULL_LIBDIR}/${MODULE_SUFFIX}")
-set(MODULE_LUADIR "${CMAKE_INSTALL_FULL_DATADIR}/${MODULE_SUFFIX}")
-set(MODULE_INCLUDEDIR "${CMAKE_INSTALL_FULL_INCLUDEDIR}/${MODULE_SUFFIX}")
-message(STATUS "Module sources: ${MODULE_LUADIR}")
-message(STATUS "Module libraries:${MODULE_LIBDIR}")
-message(STATUS "Module includes: ${MODULE_INCLUDEDIR}")
 
-list(APPEND MODULE_LUAPATH "${MODULE_LUADIR}/?.lua")
-list(APPEND MODULE_LUAPATH "${MODULE_LUADIR}/?/init.lua")
-list(APPEND MODULE_LIBPATH "${MODULE_LIBDIR}/?${CMAKE_SHARED_MODULE_SUFFIX}")
+set(MODULE_SUFFIX "tarantool")
+set(MODULE_LIBDIR "${CMAKE_INSTALL_LIBDIR}/${MODULE_SUFFIX}")
+set(MODULE_LUADIR "${CMAKE_INSTALL_DATADIR}/${MODULE_SUFFIX}")
+set(MODULE_INCLUDEDIR "${CMAKE_INSTALL_INCLUDEDIR}/${MODULE_SUFFIX}")
+
+foreach(dir
+        LIBDIR
+        LUADIR
+        INCLUDEDIR
+        )
+    if(NOT IS_ABSOLUTE ${MODULE_${dir}})
+        set(MODULE_FULL_${dir} "${CMAKE_INSTALL_PREFIX}/${MODULE_${dir}}")
+    else()
+        set(MODULE_FULL_${dir} "${MODULE_${dir}}")
+    endif()
+endforeach()
+
+message(STATUS "Module sources:   ${MODULE_FULL_LUADIR}")
+message(STATUS "Module libraries: ${MODULE_FULL_LIBDIR}")
+message(STATUS "Module includes:  ${MODULE_FULL_INCLUDEDIR}")
+
+list(APPEND MODULE_LUAPATH "${MODULE_FULL_LUADIR}/?.lua")
+list(APPEND MODULE_LUAPATH "${MODULE_FULL_LUADIR}/?/init.lua")
+list(APPEND MODULE_LIBPATH "${MODULE_FULL_LIBDIR}/?${CMAKE_SHARED_MODULE_SUFFIX}")
+
 message(STATUS "Module package.path: ${MODULE_LUAPATH}")
 message(STATUS "Module package.cpath: ${MODULE_LIBPATH}")
 
@@ -291,6 +306,13 @@ libyaml_build()
 add_dependencies(build_bundled_libs yaml)
 
 #
+# LibUUID
+#
+
+set(LIBUUID_FIND_REQUIRED ON)
+find_package(LibUUID)
+
+#
 # Third-Party misc
 #
 
@@ -300,6 +322,7 @@ add_dependencies(build_bundled_libs misc)
 
 include(BuildSophia)
 sophia_build()
+set (sophia_lib "${PROJECT_BINARY_DIR}/third_party/sophia/db/libsophia.a")
 
 option(ENABLE_RPM "Enable install of a RPM specific files" OFF)
 

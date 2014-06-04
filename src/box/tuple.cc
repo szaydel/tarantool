@@ -217,7 +217,7 @@ tuple_init_field_map(struct tuple_format *format, struct tuple *tuple, uint32_t 
 	/* Check to see if the tuple has a sufficient number of fields. */
 	uint32_t field_count = mp_decode_array(&pos);
 	if (unlikely(field_count < format->field_count))
-		tnt_raise(ClientError, ER_INDEX_ARITY,
+		tnt_raise(ClientError, ER_INDEX_FIELD_COUNT,
 			  (unsigned) field_count,
 			  (unsigned) format->field_count);
 
@@ -309,7 +309,7 @@ tuple_seek(struct tuple_iterator *it, uint32_t i)
 		return tuple_next(it);
 	} else {
 		it->pos = it->tuple->data + it->tuple->bsize;
-		it->fieldno = tuple_arity(it->tuple);
+		it->fieldno = tuple_field_count(it->tuple);
 		return NULL;
 	}
 }
@@ -428,7 +428,7 @@ tuple_new(struct tuple_format *format, const char *data, const char *end)
 inline __attribute__((always_inline)) int
 mp_compare_uint(const char **data_a, const char **data_b);
 
-static inline int
+int
 tuple_compare_field(const char *field_a, const char *field_b,
 		    enum field_type type)
 {

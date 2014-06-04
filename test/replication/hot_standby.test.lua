@@ -7,16 +7,22 @@ box.schema.user.grant('guest', 'read,write,execute', 'universe')
 
 --# setopt delimiter ';'
 --# set connection default, hot_standby, replica
-while box.space['_priv']:len() < 1 do box.fiber.sleep(0.01) end;
+while box.space['_priv']:len() < 1 do require('fiber').sleep(0.01) end;
 do
-    begin_lsn = box.info.lsn
+    local pri_id = ''
+    local begin_lsn = 0
 
-    function _set_pri_lsn(_lsn)
+    function _set_pri_lsn(_id, _lsn)
+        pri_id = _id
         begin_lsn = _lsn
     end
 
+    function _get_pri_lsn()
+        return box.info.vclock[pri_id]
+    end
+
     function _print_lsn()
-        return (box.info.lsn - begin_lsn + 1)
+        return (_get_pri_lsn() - begin_lsn + 1)
     end
 
     function _insert(_begin, _end)
@@ -36,8 +42,8 @@ do
     end
 
     function _wait_lsn(_lsnd)
-        while box.info.lsn < _lsnd + begin_lsn do
-            box.fiber.sleep(0.001)
+        while _get_pri_lsn() < _lsnd + begin_lsn do
+            require('fiber').sleep(0.001)
         end
         begin_lsn = begin_lsn + _lsnd
     end
@@ -47,10 +53,8 @@ end;
 
 -- set begin lsn on master, replica and hot_standby.
 --# set variable replica_port to 'replica.primary_port'
-begin_lsn = box.info.lsn
-
 a = box.net.box.new('127.0.0.1', replica_port)
-a:call('_set_pri_lsn', box.info.lsn)
+a:call('_set_pri_lsn', box.info.node.id, box.info.node.lsn)
 a:close()
 
 space = box.schema.create_space('tweedledum')
@@ -64,13 +68,13 @@ _wait_lsn(10)
 _select(1, 10)
 
 --# stop server default
-box.fiber.sleep(0.2)
+require('fiber').sleep(0.2)
 
 -- hot_standby.primary_port is garbage, since hot_standby.lua
 -- uses MASTER_PORT environment variable for its primary_port
 --# set variable hot_standby_port to 'hot_standby.master_port'
 a = box.net.box.new('127.0.0.1', hot_standby_port)
-a:call('_set_pri_lsn', box.info.lsn)
+a:call('_set_pri_lsn', box.info.node.id, box.info.node.lsn)
 a:close()
 
 --# set connection hot_standby

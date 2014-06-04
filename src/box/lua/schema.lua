@@ -1,6 +1,13 @@
 -- schema.lua (internal file)
 --
 local ffi = require('ffi')
+local session = require('session')
+local msgpackffi = require('msgpackffi')
+local fun = require('fun')
+local internal = require('box.internal')
+
+local builtin = ffi.C
+
 ffi.cdef[[
     struct space *space_by_id(uint32_t id);
     void space_run_triggers(struct space *space, bool yesno);
@@ -8,6 +15,7 @@ ffi.cdef[[
     struct iterator {
         struct tuple *(*next)(struct iterator *);
         void (*free)(struct iterator *);
+        void (*close)(struct iterator *);
     };
     struct iterator *
     boxffi_index_iterator(uint32_t space_id, uint32_t index_id, int type,
@@ -34,9 +42,6 @@ ffi.cdef[[
     void password_prepare(const char *password, int len,
 		                  char *out, int out_len);
 ]]
-local builtin = ffi.C
-local msgpackffi = require('msgpackffi')
-local fun = require('fun')
 
 local function user_resolve(user)
     local _user = box.space[box.schema.USER_ID]
@@ -83,17 +88,17 @@ box.schema.space.create = function(name, options)
             id = id + 1
         end
     end
-    if options.arity == nil then
-        options.arity = 0
+    if options.field_count == nil then
+        options.field_count = 0
     end
     local uid = nil
     if options.user then
         uid = user_resolve(options.user)
     end
     if uid == nil then
-        uid = box.session.uid()
+        uid = session.uid()
     end
-    _space:insert{id, uid, name, engine, options.arity, temporary}
+    _space:insert{id, uid, name, engine, options.field_count, temporary}
     return box.space[id], "created"
 end
 box.schema.create_space = box.schema.space.create
@@ -159,9 +164,6 @@ box.schema.index.rename = function(space_id, index_id, name)
     _index:update({space_id, index_id}, {{"=", 2, name}})
 end
 box.schema.index.alter = function(space_id, index_id, options)
-    if space_id == nil or index_id == nil then
-        box.raise(box.error.ER_PROC_LUA, "Usage: index:alter{opts}")
-    end
     if box.space[space_id] == nil then
         box.raise(box.error.ER_NO_SUCH_SPACE,
                   "Space "..space_id.." does not exist")
@@ -174,7 +176,7 @@ box.schema.index.alter = function(space_id, index_id, options)
         return
     end
     if type(space_id) == "string" then
-        space_id = box.space[space_id].n
+        space_id = box.space[space_id].id
     end
     if type(index_id) == "string" then
         index_id = box.space[space_id].index[index_id].id
@@ -326,7 +328,7 @@ function box.schema.space.bless(space)
         end
 
         local keybuf = ffi.string(pkey, pkey_end - pkey)
-        local cdata = builtin.boxffi_index_iterator(index.n, index.id,
+        local cdata = builtin.boxffi_index_iterator(index.space.id, index.id,
             itype, keybuf);
         if cdata == nil then
             box.raise()
@@ -362,14 +364,14 @@ function box.schema.space.bless(space)
         if space.index[index_id] == nil then
             box.raise(box.error.ER_NO_SUCH_INDEX,
                 string.format("No index #%d is defined in space %d", index_id,
-                    space.n))
+                    space.id))
         end
     end
 
     index_mt.get = function(index, key)
         local key, key_end = msgpackffi.encode_tuple(key)
         port.size = 0;
-        if builtin.boxffi_select(ffi.cast(port_t, port), index.n,
+        if builtin.boxffi_select(ffi.cast(port_t, port), index.space.id,
            index.id, box.index.EQ, 0, 2, key, key_end) ~=0 then
             return box.raise()
         end
@@ -409,7 +411,7 @@ function box.schema.space.bless(space)
         end
 
         port.size = 0;
-        if builtin.boxffi_select(ffi.cast(port_t, port), index.n,
+        if builtin.boxffi_select(ffi.cast(port_t, port), index.space.id,
             index.id, iterator, offset, limit, key, key_end) ~=0 then
             return box.raise()
         end
@@ -421,23 +423,31 @@ function box.schema.space.bless(space)
         return ret
     end
     index_mt.update = function(index, key, ops)
-        return box._update(index.n, index.id, keify(key), ops);
+        return internal.update(index.space.id, index.id, keify(key), ops);
     end
     index_mt.delete = function(index, key)
-        return box._delete(index.n, index.id, keify(key));
+        return internal.delete(index.space.id, index.id, keify(key));
     end
     index_mt.drop = function(index)
-        return box.schema.index.drop(index.n, index.id)
+        return box.schema.index.drop(index.space.id, index.id)
     end
     index_mt.rename = function(index, name)
-        return box.schema.index.rename(index.n, index.id, name)
+        return box.schema.index.rename(index.space.id, index.id, name)
     end
     index_mt.alter= function(index, options)
-        return box.schema.index.alter(index.n, index.id, options)
+        if index.id == nil or index.space == nil then
+            box.raise(box.error.ER_PROC_LUA, "Usage: index:alter{opts}")
+        end
+        return box.schema.index.alter(index.space.id, index.id, options)
     end
     --
     local space_mt = {}
-    space_mt.len = function(space) return space.index[0]:len() end
+    space_mt.len = function(space)
+        if space.index[0] == nil then
+            return 0 -- empty space without indexes, return 0
+        end
+        return space.index[0]:len()
+    end
     space_mt.__newindex = index_mt.__newindex
 
     space_mt.get = function(space, key)
@@ -449,19 +459,19 @@ function box.schema.space.bless(space)
         return space.index[0]:select(key, opts)
     end
     space_mt.insert = function(space, tuple)
-        return box._insert(space.n, tuple);
+        return internal.insert(space.id, tuple);
     end
     space_mt.begin = function(space)
-        return box.begin();
+        return internal.begin();
     end
     space_mt.commit = function(space)
-        return box.commit();
+        return internal.commit();
     end
     space_mt.rollback = function(space)
-        return box.rollback();
+        return internal.rollback();
     end
     space_mt.replace = function(space, tuple)
-        return box._replace(space.n, tuple);
+        return internal.replace(space.id, tuple);
     end
     space_mt.put = space_mt.replace; -- put is an alias for replace
     space_mt.update = function(space, key, ops)
@@ -485,37 +495,44 @@ function box.schema.space.bless(space)
         return space:insert(tuple)
     end
     space_mt.pairs = function(space, key)
+        if space.index[0] == nil then
+            -- empty space without indexes, return empty iterator
+            return fun.iter({})
+        end
         check_index(space, 0)
         return space.index[0]:pairs(key)
     end
     space_mt.__pairs = space_mt.pairs -- Lua 5.2 compatibility
     space_mt.__ipairs = space_mt.pairs -- Lua 5.2 compatibility
     space_mt.truncate = function(space)
+        if space.index[0] == nil then
+            return -- empty space without indexes, nothing to truncate
+        end
         check_index(space, 0)
         local pk = space.index[0]
         while #pk.idx > 0 do
             local state, t
             for state, t in pk:pairs() do
                 local key = {}
-                -- ipairs does not work because pk.key_field is zero-indexed
-                for _k2, key_field in pairs(pk.key_field) do
-                    table.insert(key, t[key_field.fieldno])
+                -- ipairs does not work because pk.parts is zero-indexed
+                for _k2, parts in pairs(pk.parts) do
+                    table.insert(key, t[parts.fieldno])
                 end
                 space:delete(key)
             end
         end
     end
     space_mt.drop = function(space)
-        return box.schema.space.drop(space.n)
+        return box.schema.space.drop(space.id)
     end
     space_mt.rename = function(space, name)
-        return box.schema.space.rename(space.n, name)
+        return box.schema.space.rename(space.id, name)
     end
     space_mt.create_index = function(space, name, options)
-        return box.schema.index.create(space.n, name, options)
+        return box.schema.index.create(space.id, name, options)
     end
     space_mt.run_triggers = function(space, yesno)
-        local space = ffi.C.space_by_id(space.n)
+        local space = ffi.C.space_by_id(space.id)
         if space == nil then
             box.raise(box.error.ER_NO_SUCH_SPACE, "Space not found")
         end
@@ -527,7 +544,7 @@ function box.schema.space.bless(space)
     if type(space.index) == 'table' and space.enabled then
         for j, index in pairs(space.index) do
             if type(j) == 'number' then
-                rawset(index, 'idx', box.index.bind(space.n, j))
+                rawset(index, 'idx', box.index.bind(space.id, j))
                 setmetatable(index, index_mt)
             end
         end
@@ -563,7 +580,7 @@ local function object_resolve(object_type, object_name)
             box.raise(box.error.ER_NO_SUCH_SPACE,
                       "Space '"..object_name.."' does not exist")
         end
-        return space.n
+        return space.id
     end
     if object_type == 'function' then
         local _func = box.space[box.schema.FUNC_ID]
@@ -592,7 +609,7 @@ box.schema.func.create = function(name)
             box.raise(box.error.ER_FUNCTION_EXISTS,
                       "Function '"..name.."' already exists")
     end
-    _func:auto_increment{box.session.uid(), name}
+    _func:auto_increment{session.uid(), name}
 end
 
 box.schema.func.drop = function(name)
@@ -611,7 +628,7 @@ box.schema.user.password = function(password)
 end
 
 box.schema.user.passwd = function(new_password)
-    local uid = box.session.uid()
+    local uid = session.uid()
     local _user = box.space[box.schema.USER_ID]
     auth_mech_list = {}
     auth_mech_list["chap-sha1"] = box.schema.user.password(new_password)
@@ -668,7 +685,7 @@ box.schema.user.grant = function(user_name, privilege, object_type,
     privilege = privilege_resolve(privilege)
     local oid = object_resolve(object_type, object_name)
     if grantor == nil then
-        grantor = box.session.uid()
+        grantor = session.uid()
     else
         grantor = user_resolve(grantor)
     end

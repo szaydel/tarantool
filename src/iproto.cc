@@ -43,7 +43,7 @@
 #include "scoped_guard.h"
 #include "memory.h"
 #include "msgpuck/msgpuck.h"
-#include "replication.h"
+#include "box/replication.h"
 #include "third_party/base64.h"
 #include "coio.h"
 
@@ -77,7 +77,7 @@ struct iproto_request
 	struct session *session;
 	iproto_request_f process;
 	/* Request message code and sync. */
-	struct iproto_packet packet;
+	struct iproto_header header;
 	/* Box request, if this is a DML */
 	struct request request;
 	size_t total_len;
@@ -97,6 +97,9 @@ iproto_process_disconnect(struct iproto_request *request);
 
 static void
 iproto_process_dml(struct iproto_request *request);
+
+static void
+iproto_process_admin(struct iproto_request *request);
 
 struct IprotoRequestGuard {
 	struct iproto_request *ireq;
@@ -317,7 +320,7 @@ iproto_connection_on_output(ev_loop * /* loop */, struct ev_io *watcher,
 			    int /* revents */);
 
 static struct iproto_connection *
-iproto_connection_new(const char *name, int fd, struct sockaddr_in *addr)
+iproto_connection_new(const char *name, int fd, struct sockaddr *addr)
 {
 	struct iproto_connection *con = (struct iproto_connection *)
 		mempool_alloc(&iproto_connection_pool);
@@ -457,30 +460,6 @@ iproto_connection_input_iobuf(struct iproto_connection *con)
 	return newbuf;
 }
 
-static void
-iproto_process_admin(struct iproto_request *ireq,
-		     struct iproto_connection *con)
-{
-	switch (ireq->packet.code) {
-	case IPROTO_PING:
-		iproto_reply_ping(&ireq->iobuf->out, ireq->packet.sync);
-		break;
-	case IPROTO_SUBSCRIBE:
-		if (ireq->packet.bodycnt != 0) {
-			tnt_raise(ClientError, ER_INVALID_MSGPACK,
-				  "subscribe request body");
-		}
-		subscribe(con->input.fd, ireq->packet.lsn, ireq->packet.sync);
-		tnt_raise(IprotoConnectionShutdown);
-	default:
-		tnt_raise(ClientError, ER_UNKNOWN_REQUEST_TYPE,
-			   (uint32_t) ireq->packet.code);
-	}
-	if (! ev_is_active(&con->output))
-		ev_feed_event(con->loop, &con->output, EV_WRITE);
-}
-
-
 /** Enqueue all requests which were read up. */
 static inline void
 iproto_enqueue_batch(struct iproto_connection *con, struct ibuf *in)
@@ -490,14 +469,18 @@ iproto_enqueue_batch(struct iproto_connection *con, struct ibuf *in)
 		const char *pos = reqstart;
 		/* Read request length. */
 		if (mp_typeof(*pos) != MP_UINT) {
-			tnt_raise(IllegalParams,
-				  "Invalid MsgPack - packet length");
+error:
+			tnt_raise(ClientError, ER_INVALID_MSGPACK,
+				  "packet length");
 		}
 		if (mp_check_uint(pos, in->end) >= 0)
 			break;
 		uint32_t len = mp_decode_uint(&pos);
-
-		/* Skip fixheader */
+		/* Skip optional request padding. */
+		if (pos < in->end && mp_typeof(*pos) == MP_STR &&
+		    mp_check(&pos, in->end)) {
+			goto error;
+		}
 		const char *reqend = pos + len;
 		if (reqend > in->end)
 			break;
@@ -505,31 +488,30 @@ iproto_enqueue_batch(struct iproto_connection *con, struct ibuf *in)
 			iproto_request_new(con, iproto_process_dml);
 		IprotoRequestGuard guard(ireq);
 
-		iproto_packet_decode(&ireq->packet, &pos, reqend);
+		iproto_header_decode(&ireq->header, &pos, reqend);
 		ireq->total_len = pos - reqstart; /* total request length */
+
 
 		/*
 		 * sic: in case of exception con->parse_size
 		 * as well as in->pos must not be advanced, to
 		 * stay in sync.
 		 */
-		if (iproto_request_is_dml(ireq->packet.code)) {
-			if (ireq->packet.bodycnt == 0) {
-				tnt_raise(IllegalParams,
-					  "Invalid MsgPack - invalid request");
+		if (iproto_request_is_dml(ireq->header.type)) {
+			if (ireq->header.bodycnt == 0) {
+				tnt_raise(ClientError, ER_INVALID_MSGPACK,
+					  "request type");
 			}
-			request_create(&ireq->request, ireq->packet.code);
-			pos = (const char *) ireq->packet.body[0].iov_base;
+			request_create(&ireq->request, ireq->header.type);
+			pos = (const char *) ireq->header.body[0].iov_base;
 			request_decode(&ireq->request, pos,
-				       ireq->packet.body[0].iov_len);
-			ireq->request.packet = &ireq->packet;
-			iproto_queue_push(&request_queue, guard.release());
-			/* Request will be discarded in iproto_process_dml */
+				       ireq->header.body[0].iov_len);
 		} else {
-			iproto_process_admin(ireq, con);
-			/* Entire request can be discarded. */
-			in->pos += ireq->packet.body[0].iov_len;
+			ireq->process = iproto_process_admin;
 		}
+		ireq->request.header = &ireq->header;
+		iproto_queue_push(&request_queue, guard.release());
+		/* Request will be discarded in iproto_process_XXX */
 
 		/* Request is parsed */
 		con->parse_size -= reqend - reqstart;
@@ -624,7 +606,7 @@ iproto_flush(struct iobuf *iobuf, int fd, struct obuf_svp *svp)
 
 	if (nwr > 0) {
 		if (svp->size + nwr == obuf_size(&iobuf->out)) {
-			iobuf_gc(iobuf);
+			iobuf_reset(iobuf);
 			*svp = obuf_create_svp(&iobuf->out);
 			return 0;
 		}
@@ -690,13 +672,65 @@ iproto_process_dml(struct iproto_request *ireq)
 	struct obuf *out = &iobuf->out;
 
 	struct iproto_port port;
-	iproto_port_init(&port, out, ireq->packet.sync);
+	iproto_port_init(&port, out, ireq->header.sync);
 	try {
 		box_process((struct port *) &port, &ireq->request);
 	} catch (ClientError *e) {
 		if (port.found)
 			obuf_rollback_to_svp(out, &port.svp);
-		iproto_reply_error(out, e, ireq->packet.sync);
+		iproto_reply_error(out, e, ireq->header.sync);
+	}
+}
+
+static void
+iproto_process_admin(struct iproto_request *ireq)
+{
+	struct iobuf *iobuf = ireq->iobuf;
+	struct iproto_connection *con = ireq->connection;
+
+	auto scope_guard = make_scoped_guard([=]{
+		/* Discard request (see iproto_enqueue_batch()) */
+		iobuf->in.pos += ireq->total_len;
+
+		if (evio_is_active(&con->output)) {
+			if (! ev_is_active(&con->output))
+				ev_feed_event(con->loop,
+					      &con->output,
+					      EV_WRITE);
+		} else if (iproto_connection_is_idle(con)) {
+			iproto_connection_delete(con);
+		}
+	});
+
+	if (unlikely(! evio_is_active(&con->output)))
+		return;
+
+	try {
+		switch (ireq->header.type) {
+		case IPROTO_PING:
+			iproto_reply_ping(&ireq->iobuf->out,
+					  ireq->header.sync);
+			break;
+		case IPROTO_JOIN:
+			/* TODO: replication authorization */
+			session_set_user(con->session, ADMIN, ADMIN);
+			replication_join(con->input.fd, &ireq->header);
+			/* TODO: check requests in `con; queue */
+			iproto_connection_shutdown(con);
+			return;
+		case IPROTO_SUBSCRIBE:
+			/* TODO: replication authorization */
+			replication_subscribe(con->input.fd, &ireq->header);
+			/* TODO: check requests in `con; queue */
+			iproto_connection_shutdown(con);
+			return;
+		default:
+			tnt_raise(ClientError, ER_UNKNOWN_REQUEST_TYPE,
+				   (uint32_t) ireq->header.type);
+		}
+	} catch (ClientError *e) {
+		say_error("admin command error: %s", e->errmsg());
+		iproto_reply_error(&iobuf->out, e, ireq->header.sync);
 	}
 }
 
@@ -744,7 +778,7 @@ iproto_process_connect(struct iproto_request *request)
 			   IPROTO_GREETING_SIZE);
 		trigger_run(&session_on_connect, NULL);
 	} catch (ClientError *e) {
-		iproto_reply_error(&iobuf->out, e, request->packet.code);
+		iproto_reply_error(&iobuf->out, e, request->header.type);
 		try {
 			iproto_flush(iobuf, fd, &con->write_pos);
 		} catch (Exception *e) {
@@ -782,7 +816,7 @@ iproto_process_disconnect(struct iproto_request *request)
  */
 static void
 iproto_on_accept(struct evio_service * /* service */, int fd,
-		 struct sockaddr_in *addr)
+		 struct sockaddr *addr, socklen_t addrlen)
 {
 	char name[SERVICE_NAME_MAXLEN];
 	snprintf(name, sizeof(name), "%s/%s", "iobuf", sio_strfaddr(addr));
@@ -798,20 +832,21 @@ iproto_on_accept(struct evio_service * /* service */, int fd,
 	struct iproto_request *ireq =
 		iproto_request_new(con, iproto_process_connect);
 	iproto_queue_push(&request_queue, ireq);
+
+	(void)addrlen;
 }
 
 /** Initialize a read-write port. */
 void
-iproto_init(const char *bind_ipaddr, int primary_port, int readahead)
+iproto_init(const char *uri)
 {
-	iobuf_init(readahead);
 	/* Run a primary server. */
-	if (primary_port == 0)
+	if (!uri)
 		return;
 
 	static struct evio_service primary;
 	evio_service_init(loop(), &primary, "primary",
-			  bind_ipaddr, primary_port,
+			  uri,
 			  iproto_on_accept, NULL);
 	evio_service_on_bind(&primary,
 			     box_leave_local_standby_mode, NULL);

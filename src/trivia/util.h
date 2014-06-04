@@ -163,11 +163,11 @@ struct symbol {
 	const char *name;
 	void *end;
 };
-char *find_path(const char *argv0);
 struct symbol *addr2symbol(void *addr);
 void symbols_load(const char *name);
 void symbols_free();
 #endif /* HAVE_BFD */
+char *find_path(const char *argv0);
 
 char *abspath(const char *filename);
 
@@ -193,6 +193,12 @@ FILE *
 open_memstream(char **ptr, size_t *sizeloc);
 #endif /* HAVE_OPEN_MEMSTREAM */
 
+#ifndef HAVE_FMEMOPEN
+/* Declare open_memstream(). */
+#include <stdio.h>
+FILE *
+fmemopen(void *buf, size_t size, const char *mode);
+#endif /* HAVE_FMEMOPEN */
 
 #if defined(__cplusplus)
 } /* extern "C" */

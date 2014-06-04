@@ -52,14 +52,14 @@ struct session {
 	int fd;
 	/** Peer cookie - description of the peer. */
 	uint64_t cookie;
+	/** Authentication salt. */
+	int salt[SESSION_SEED_SIZE/sizeof(int)];
 	/** A look up key to quickly find session user. */
 	uint8_t auth_token;
 	/** User id of the authenticated user. */
-        uint32_t uid;
 	/** Current transaction, if started. */
 	struct txn *txn;
-	/** Authentication salt. */
-	int salt[SESSION_SEED_SIZE/sizeof(int)];
+	uint32_t uid;
 };
 
 /**
@@ -128,7 +128,7 @@ void
 session_storage_cleanup(int sid);
 
 /** A helper class to create and set session in single-session fibers. */
-struct SessionGuard 
+struct SessionGuard
 {
 	SessionGuard(int fd, uint64_t cookie);
         ~SessionGuard();

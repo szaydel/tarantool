@@ -33,6 +33,8 @@
 #include <exception.h>
 #include "msgpuck/msgpuck.h"
 #include <limits.h>
+#include <wchar.h>
+#include <wctype.h>
 
 enum {
 	BOX_SPACE_MAX = INT32_MAX,
@@ -194,9 +196,7 @@ key_list_del_key(struct rlist *key_list, uint32_t id);
 /**
  * Check a key definition for violation of various limits.
  *
- * @param id        space id
  * @param key_def   key_def
- * @param type_str  type name (to produce a nice error)
  */
 void
 key_def_check(struct key_def *key_def);
@@ -213,7 +213,7 @@ struct space_def {
 	 * If set, each tuple
 	 * must have exactly this many fields.
 	 */
-	uint32_t arity;
+	uint32_t field_count;
 	char name[BOX_NAME_MAX + 1];
 	char engine_name[BOX_NAME_MAX + 1];
         /**
@@ -245,7 +245,7 @@ key_mp_type_validate(enum field_type key_type, enum mp_type mp_type,
 	       int err, uint32_t field_no)
 {
 	assert(key_type < field_type_MAX);
-	assert(mp_type < CHAR_BIT * sizeof(*key_mp_type));
+	assert((int) mp_type < (int) CHAR_BIT * sizeof(*key_mp_type));
 
 	if (unlikely((key_mp_type[key_type] & (1U << mp_type)) == 0))
 		tnt_raise(ClientError, err, field_no,
@@ -287,5 +287,19 @@ struct priv_def {
 	/** What is being or has been granted. */
 	uint8_t access;
 };
+
+/**
+ * Check object identifier for invalid symbols.
+ * The function checks \a str for matching [a-zA-Z_][a-zA-Z0-9_]* expression.
+ * Result is locale-dependent.
+ */
+bool
+identifier_is_valid(const char *str);
+
+/**
+ * Throw an error if identifier is not valid.
+ */
+void
+identifier_check(const char *str);
 
 #endif /* TARANTOOL_BOX_KEY_DEF_H_INCLUDED */

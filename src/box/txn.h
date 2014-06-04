@@ -45,8 +45,8 @@ struct txn_request {
 	struct tuple *old_tuple;
 	struct tuple *new_tuple;
 
-	/* Redo info: list of binary packets */
-	struct iproto_packet *packet;
+	/* Redo info: list of binary row */
+	struct iproto_header* row;
 };
 
 /* pointer to the current multithreaded transaction (if any) */
@@ -74,4 +74,5 @@ void txn_replace(struct txn *txn, struct space *space,
 		 struct tuple *old_tuple, struct tuple *new_tuple,
 		 enum dup_replace_mode mode);
 void txn_add_redo(struct txn *txn, struct request *request);
+
 #endif /* TARANTOOL_BOX_TXN_H_INCLUDED */

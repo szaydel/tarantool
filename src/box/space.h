@@ -189,16 +189,20 @@ space_replace(struct space *space, struct tuple *old_tuple,
 struct tuple *
 space_replace_no_keys(struct space*, struct tuple*, struct tuple*,
                       enum dup_replace_mode);
+struct tuple *
+space_replace_primary_key(struct space*, struct tuple*, struct tuple*,
+                          enum dup_replace_mode);
 
 void space_begin_build_primary_key(struct space *space);
 void space_build_primary_key(struct space *space);
 void space_build_all_keys(struct space *space);
+void space_noop(struct space *space);
 
 uint32_t
 space_size(struct space *space);
 
 /**
- * Check that the tuple has correct arity and correct field
+ * Check that the tuple has correct field count and correct field
  * types (a pre-requisite for an INSERT).
  */
 void
@@ -266,13 +270,13 @@ extern "C" void
 space_run_triggers(struct space *space, bool yesno);
 
 struct index_stat {
-	int32_t n;
+	int32_t id;
 	int64_t keys;
 	int64_t memsize;
 };
 
 struct space_stat {
-	int32_t n;
+	int32_t id;
 	struct index_stat index[BOX_INDEX_MAX];
 };
 

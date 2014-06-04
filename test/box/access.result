@@ -1,20 +1,23 @@
+session = require('session')
+---
+...
 -- user id for a Lua session is admin - 1
-box.session.uid()
+session.uid()
 ---
 - 1
 ...
 -- extra arguments are ignored
-box.session.uid(nil)
+session.uid(nil)
 ---
 - 1
 ...
 -- admin
-box.session.user()
+session.user()
 ---
 - admin
 ...
 -- extra argumentes are ignored
-box.session.user(nil)
+session.user(nil)
 ---
 - admin
 ...
@@ -35,7 +38,7 @@ box.schema.user.create('test', { password = 'test' })
 -- su() let's you change the user of the session
 -- the user will be unabe to change back unless he/she
 -- is granted access to 'su'
-box.session.su('test')
+session.su('test')
 ---
 ...
 -- you can't create spaces unless you have a write access on
@@ -48,7 +51,7 @@ box.schema.create_space('test')
 -- su() goes through because called from admin
 -- console, and it has no access checks
 -- for functions
-box.session.su('admin')
+session.su('admin')
 ---
 ...
 box.schema.user.grant('test', 'write', 'space', '_space')
@@ -88,16 +91,16 @@ box.schema.user.create('rich')
 box.schema.user.grant('rich', 'read,write', 'universe')
 ---
 ...
-box.session.su('rich')
+session.su('rich')
 ---
 ...
-uid = box.session.uid()
+uid = session.uid()
 ---
 ...
 box.schema.func.create('dummy')
 ---
 ...
-box.session.su('admin')
+session.su('admin')
 ---
 ...
 box.space['_user']:delete{uid}
@@ -119,5 +122,39 @@ box.space['_user']:delete{uid}
 - [3, '', 'rich', []]
 ...
 box.schema.user.drop('test')
+---
+...
+session = nil
+---
+...
+--------------------------------------------------------------------------------
+-- #198: names like '' and 'x.y' and 5 and 'primary ' are legal
+--------------------------------------------------------------------------------
+-- invalid identifiers
+box.schema.user.create('invalid.identifier')
+---
+- error: Invalid identifier 'invalid.identifier' (expected [a-zA-Z_][a-zA-Z0-9_]*)
+...
+box.schema.user.create('invalid identifier')
+---
+- error: Invalid identifier 'invalid identifier' (expected [a-zA-Z_][a-zA-Z0-9_]*)
+...
+box.schema.user.create('user ')
+---
+- error: Invalid identifier 'user ' (expected [a-zA-Z_][a-zA-Z0-9_]*)
+...
+box.schema.user.create('5')
+---
+- error: Invalid identifier '5' (expected [a-zA-Z_][a-zA-Z0-9_]*)
+...
+box.schema.user.create(' ')
+---
+- error: Invalid identifier ' ' (expected [a-zA-Z_][a-zA-Z0-9_]*)
+...
+-- valid identifiers
+box.schema.user.create('Петя_Иванов')
+---
+...
+box.schema.user.drop('Петя_Иванов')
 ---
 ...

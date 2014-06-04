@@ -13,31 +13,37 @@ include_directories(${LIBCORO_INCLUDE_DIR})
 include_directories(${LIBGOPT_INCLUDE_DIR})
 include_directories(${READLINE_INCLUDE_DIR})
 
-# Require pthread globally if compiling with GCC
-if (CMAKE_COMPILER_IS_GNUCC)
-    add_compile_flags("C;CXX" "-pthread")
-endif()
-
 # Compile src/lua/*.lua files into src/lua/*.lua.c sources
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/lua)
 set(lua_sources)
+lua_source(lua_sources lua/init.lua)
 lua_source(lua_sources lua/uuid.lua)
+lua_source(lua_sources lua/digest.lua)
 lua_source(lua_sources lua/session.lua)
 lua_source(lua_sources lua/msgpackffi.lua)
 lua_source(lua_sources lua/interactive.lua)
 lua_source(lua_sources lua/load_cfg.lua)
+lua_source(lua_sources lua/bsdsocket.lua)
+lua_source(lua_sources lua/errno.lua)
+lua_source(lua_sources lua/log.lua)
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/third_party/luafun)
 lua_source(lua_sources ../third_party/luafun/fun.lua)
-set(bin_sources)
-bin_source(bin_sources bootstrap.snap bootstrap.h)
 
 add_custom_target(generate_lua_sources
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/src/box
     DEPENDS ${lua_sources})
 set_property(DIRECTORY PROPERTY ADDITIONAL_MAKE_CLEAN_FILES ${lua_sources})
 
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/src/port-uri.cc
+	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+	COMMAND ragel -G2 src/port-uri.rl -o src/port-uri.cc
+	DEPENDS ${CMAKE_SOURCE_DIR}/src/port-uri.rl)
+execute_process(COMMAND ${CMAKE_COMMAND} -E touch_nocreate
+    ${CMAKE_SOURCE_DIR}/src/port-uri.cc)
+add_custom_target(generate_port_uri_cc
+    DEPENDS ${CMAKE_SOURCE_DIR}/src/port-uri.cc)
+
 set (common_sources
-     replication.cc
      memory.cc
      fiber.cc
      util.cc
@@ -51,10 +57,7 @@ set (common_sources
      pickle.cc
      coro.cc
      stat.cc
-     log_io.cc
-     recovery.cc
      admin.cc
-     replica.cc
      iproto.cc
      iproto_constants.cc
      iproto_port.cc
@@ -65,7 +68,7 @@ set (common_sources
      errinj.cc
      errcode.c
      assoc.c
-     say.c
+     say.cc
      fio.c
      crc32.c
      random.c
@@ -75,13 +78,12 @@ set (common_sources
      cfg.cc
      cpu_feature.c
      fiob.c
+     tt_uuid.c
      ffisyms.cc
+     port-uri.cc
      lua/init.cc
      lua/fiber.cc
      lua/trigger.cc
-     lua/admin.cc
-     lua/info.cc
-     lua/stat.cc
      lua/errinj.cc
      lua/ipc.cc
      lua/socket.cc
@@ -90,8 +92,9 @@ set (common_sources
      lua/yaml.cc
      lua/msgpack.cc
      lua/utils.c
+     lua/errno.c
+     lua/bsdsocket.cc
      ${lua_sources}
-     ${bin_sources}
 )
 
 if (ENABLE_TRACE)
@@ -100,6 +103,7 @@ endif()
 
 set_source_files_compile_flags(${common_sources})
 add_library(core STATIC ${common_sources})
+target_link_libraries(core pthread)
 
 set (common_libraries core small salad misc bitset msgpuck)
 
@@ -142,6 +146,7 @@ if (ENABLE_BACKTRACE AND HAVE_BFD)
     endif()
 endif()
 
+set (common_libraries ${common_libraries} ${LIBUUID_LIBRARIES})
 set (common_libraries ${common_libraries} PARENT_SCOPE)
 
 add_subdirectory(lib)
@@ -152,10 +157,16 @@ set(TARANTOOL_CXX_FLAGS ${CMAKE_CXX_FLAGS} PARENT_SCOPE)
 
 add_executable(tarantool tarantool.cc)
 add_dependencies(tarantool build_bundled_libs)
-target_link_libraries(tarantool box ${common_libraries} -rdynamic)
+target_link_libraries(tarantool
+    box
+    ${sophia_lib}
+    ${common_libraries}
+    -rdynamic)
 
-if (module_link_flags)
+# Necessary to make LuaJIT work on Darwin, see
+# http://luajit.org/install.html
+if (TARGET_OS_DARWIN)
     set_target_properties(tarantool PROPERTIES
-        LINK_FLAGS ${module_link_flags})
+        LINK_FLAGS "-pagezero_size 10000 -image_base 100000000")
 endif()
 install (TARGETS tarantool DESTINATION bin)

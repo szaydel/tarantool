@@ -46,7 +46,7 @@ struct Memtx: public Engine {
 	virtual ~Memtx()
 	{
 		/* do nothing */
-		/* engine->close(this); */
+		/* factory->close(this); */
 	}
 };
 
@@ -62,6 +62,7 @@ struct Memtx: public Engine {
  * 2) when all XLOGs are loaded:
  *    recover = space_build_all_keys
 */
+
 static inline void
 memtx_recovery_prepare(struct engine_recovery *r)
 {
@@ -74,6 +75,19 @@ MemtxFactory::MemtxFactory()
 	:EngineFactory("memtx")
 {
 	memtx_recovery_prepare(&recovery);
+}
+
+void
+MemtxFactory::recoveryEvent(enum engine_recovery_event event)
+{
+	switch (event) {
+	case END_RECOVERY_SNAPSHOT:
+		recovery.recover = space_build_primary_key;
+		break;
+	case END_RECOVERY:
+		recovery.recover = space_build_all_keys;
+		break;
+	}
 }
 
 Engine *MemtxFactory::open()
@@ -94,5 +108,52 @@ MemtxFactory::createIndex(struct key_def *key_def)
 	default:
 		assert(false);
 		return NULL;
+	}
+}
+
+void
+MemtxFactory::dropIndex(Index *index)
+{
+	struct iterator *it = index->position();
+	index->initIterator(it, ITER_ALL, NULL, 0);
+	struct tuple *tuple;
+	while ((tuple = it->next(it)))
+		tuple_ref(tuple, -1);
+}
+
+void
+MemtxFactory::keydefCheck(struct key_def *key_def)
+{
+	switch (key_def->type) {
+	case HASH:
+		if (! key_def->is_unique) {
+			tnt_raise(ClientError, ER_MODIFY_INDEX,
+				  (unsigned) key_def->iid,
+				  (unsigned) key_def->space_id,
+				  "HASH index must be unique");
+		}
+		break;
+	case TREE:
+		/* TREE index has no limitations. */
+		break;
+	case BITSET:
+		if (key_def->part_count != 1) {
+			tnt_raise(ClientError, ER_MODIFY_INDEX,
+				  (unsigned) key_def->iid,
+				  (unsigned) key_def->space_id,
+				  "BITSET index key can not be multipart");
+		}
+		if (key_def->is_unique) {
+			tnt_raise(ClientError, ER_MODIFY_INDEX,
+				  (unsigned) key_def->iid,
+				  (unsigned) key_def->space_id,
+				  "BITSET can not be unique");
+		}
+		break;
+	default:
+		tnt_raise(ClientError, ER_INDEX_TYPE,
+			  (unsigned) key_def->iid,
+			  (unsigned) key_def->space_id);
+		break;
 	}
 }

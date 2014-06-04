@@ -126,10 +126,6 @@ macro(enable_tnt_compile_flags)
         )
     endif()
 
-    if (HAVE_OPENMP)
-        add_compile_flags("C;CXX" "-fopenmp")
-    endif()
-
     add_definitions("-D__STDC_FORMAT_MACROS=1")
     add_definitions("-D__STDC_LIMIT_MACROS=1")
     add_definitions("-D__STDC_CONSTANT_MACROS=1")
@@ -142,17 +138,23 @@ macro(enable_tnt_compile_flags)
     endif()
 endmacro(enable_tnt_compile_flags)
 
+if (HAVE_OPENMP)
+    add_compile_flags("C;CXX" "-fopenmp")
+endif()
+
 #
 # GCC started to warn for unused result starting from 4.2, and
 # this is when it introduced -Wno-unused-result
 # GCC can also be built on top of llvm runtime (on mac).
 #
 
+check_c_compiler_flag("-Wno-unused-const-variable" CC_HAS_WNO_UNUSED_CONST_VARIABLE)
 check_c_compiler_flag("-Wno-unused-result" CC_HAS_WNO_UNUSED_RESULT)
 check_c_compiler_flag("-Wno-unused-value" CC_HAS_WNO_UNUSED_VALUE)
 check_c_compiler_flag("-fno-strict-aliasing" CC_HAS_FNO_STRICT_ALIASING)
 check_c_compiler_flag("-Wno-comment" CC_HAS_WNO_COMMENT)
 check_c_compiler_flag("-Wno-parentheses" CC_HAS_WNO_PARENTHESES)
+check_c_compiler_flag("-Wno-undefined-inline" CC_HAS_WNO_UNDEFINED_INLINE)
 
 if (CMAKE_COMPILER_IS_CLANG OR CMAKE_COMPILER_IS_GNUCC)
     set(HAVE_BUILTIN_CTZ 1)

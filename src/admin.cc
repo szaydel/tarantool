@@ -71,7 +71,7 @@ static void
 admin_handler(va_list ap)
 {
 	struct ev_io coio = va_arg(ap, struct ev_io);
-	struct sockaddr_in *addr = va_arg(ap, struct sockaddr_in *);
+	struct sockaddr *addr = va_arg(ap, struct sockaddr *);
 	struct iobuf *iobuf = va_arg(ap, struct iobuf *);
 	lua_State *L = lua_newthread(tarantool_L);
 	LuarefGuard coro_guard(tarantool_L);
@@ -94,21 +94,19 @@ admin_handler(va_list ap)
 	for (;;) {
 		if (admin_dispatch(&coio, iobuf, out, L) < 0)
 			return;
-		iobuf_gc(iobuf);
+		iobuf_reset(iobuf);
 		fiber_gc();
                 tbuf_reset(out);
 	}
 }
 
 void
-admin_init(const char *bind_ipaddr, int admin_port,
-	   void (*on_bind)(void *))
+admin_init(const char *uri, void (*on_bind)(void *))
 {
-	if (admin_port == 0)
+	if (!uri)
 		return;
 	static struct coio_service admin;
-	coio_service_init(&admin, "admin", bind_ipaddr,
-			  admin_port, admin_handler, NULL);
+	coio_service_init(&admin, "admin", uri, admin_handler, NULL);
 	if (on_bind)
 		evio_service_on_bind(&admin.evio_service, on_bind, NULL);
 	evio_service_start(&admin.evio_service);

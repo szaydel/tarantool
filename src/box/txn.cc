@@ -32,7 +32,8 @@
 #include "tuple.h"
 #include "space.h"
 #include <tarantool.h>
-#include <recovery.h>
+#include "cluster.h"
+#include "recovery.h"
 #include <fiber.h>
 #include "request.h" /* for request_name */
 
@@ -62,17 +63,15 @@ void
 txn_add_redo(struct txn *txn, struct request *request)
 {
         txn_request* tr = new_txn_request(txn);
-	if (recovery_state->wal_mode == WAL_NONE) {
+	tr->row = request->header;
+	if (recovery_state->wal_mode == WAL_NONE || request->header != NULL) {
 		return;
         }
-        struct iproto_packet *packet = request->packet;
-	if (packet == NULL) {
-		/* Generate binary body for Lua requests */
-		packet = (struct iproto_packet *)region_alloc0(&fiber()->gc, sizeof(*packet));
-		packet->code = request->code;
-		packet->bodycnt = request_encode(request, packet->body);
-	}
-        tr->packet = packet;
+        struct iproto_header *row = (struct iproto_header *)
+		region_alloc0(&fiber()->gc, sizeof(struct iproto_header));
+	row->type = request->type;
+	row->bodycnt = request_encode(request, row->body);
+	tr->row = row;
 }
 
 void
@@ -126,56 +125,51 @@ txn_commit(struct txn *txn)
         int flags = WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT;
 
         // First set flags
-        struct iproto_packet* last_packet = NULL;
+        struct iproto_header* last_row = NULL;
         do {
                 if ((tr->old_tuple || tr->new_tuple) &&
                     !space_is_temporary(tr->space))
                 {
-                        if (recovery_state->wal_mode != WAL_NONE) {
-                                struct iproto_packet *packet = tr->packet;
-                                assert(packet != NULL);
-                                packet->flags = flags;
-                                last_packet = packet;
-                                flags &= ~WAL_REQ_FLAG_IS_FIRST;
-                        }
-                }
+			struct iproto_header* row = tr->row;
+			assert(recovery_state->wal_mode == WAL_NONE ||
+			       row != NULL);
+			row->flags = flags;
+			last_row = row;
+			flags &= ~WAL_REQ_FLAG_IS_FIRST;
+		}
         } while ((tr = tr->next) != NULL);
 
-        if (last_packet != NULL) {
-                if (last_packet->flags & WAL_REQ_FLAG_IS_FIRST) { // transaction with single statement
-                        last_packet->flags &= ~WAL_REQ_FLAG_IN_TRANS;
+        if (last_row != NULL) {
+                if (last_row->flags & WAL_REQ_FLAG_IS_FIRST) { // transaction with single statement
+                        last_row->flags &= ~WAL_REQ_FLAG_IN_TRANS;
                 }
-                last_packet->flags &= ~WAL_REQ_FLAG_HAS_NEXT;
-                // And now send packets to WAL writers
+                last_row->flags &= ~WAL_REQ_FLAG_HAS_NEXT;
+                // And now send rows to WAL writers
                 tr = &txn->req;
-                int64_t lsn = 0;
                 do {
                         if ((tr->old_tuple || tr->new_tuple) &&
                             !space_is_temporary(tr->space))
                         {
-                                struct iproto_packet *packet = tr->packet;
-                                lsn = next_lsn(recovery_state);
-                                int res = 0;
-                                if (recovery_state->wal_mode != WAL_NONE) {
-                                        ev_tstamp start = ev_now(loop()), stop;
-                                        packet->lsn = lsn;
-                                        res = wal_write(recovery_state, packet);
-                                        stop = ev_now(loop());
+                                struct iproto_header* row = tr->row;
+				int res = 0;
+				/* txn_commit() must be done after txn_add_redo() */
+				assert(recovery_state->wal_mode == WAL_NONE ||
+				       row != NULL);
+				ev_tstamp start = ev_now(loop()), stop;
+				res = wal_write(recovery_state, row);
+				stop = ev_now(loop());
 
-                                        if (stop - start > too_long_threshold) {
-                                                say_warn("too long %s: %.3f sec",
-                                                         iproto_request_name(packet->code),
-                                                         stop - start);
-                                        }
-                                }
-                                if (res) {
-                                        confirm_lsn(recovery_state, lsn, false);
-                                        tnt_raise(LoggedError, ER_WAL_IO);
-                                }
+				if (stop - start > too_long_threshold && row != NULL) {
+					say_warn("too long %s: %.3f sec",
+						 iproto_request_name(row->type),
+						 stop - start);
+				}
+
+				if (res)
+					tnt_raise(LoggedError, ER_WAL_IO);
+
                         }
                 } while ((tr = tr->next) != NULL);
-
-                confirm_lsn(recovery_state, lsn, true);
         }
         trigger_run(&txn->on_commit, txn); /* must not throw. */
 }
@@ -195,6 +189,8 @@ txn_finish(struct txn *txn)
                         if (tr->old_tuple) {
                                 tuple_ref(tr->old_tuple, -1);
                         }
+			if (tr->space)
+				tr->space->engine->factory->txnFinish(txn);
                 } while ((tr = tr->next) != NULL);
         }
         fiber()->on_reschedule_callback = NULL;

@@ -2,7 +2,7 @@
 --# push filter 'admin_port: .*' to 'admin_port: <number>'
 box.cfg.nosuchoption = 1
 ---
-- error: '[string "-- load_cfg.lua - internal file..."]:92: Attempt to modify a read-only
+- error: '[string "-- load_cfg.lua - internal file..."]:108: Attempt to modify a read-only
     table'
 ...
 t = {} for k,v in pairs(box.cfg) do if type(v) ~= 'table' and type(v) ~= 'function' then table.insert(t, k..': '..tostring(v)) end end
@@ -10,26 +10,24 @@ t = {} for k,v in pairs(box.cfg) do if type(v) ~= 'table' and type(v) ~= 'functi
 ...
 t
 ---
-- - 'pid_file: tarantool.pid'
+- - 'too_long_threshold: 0.5'
   - 'slab_alloc_factor: 2'
-  - 'slab_alloc_minimal: 64'
+  - 'rows_per_wal: 50'
   - 'admin_port: <number>
-  - 'primary_port: <number>
+  - 'slab_alloc_arena: 0.1'
   - 'wal_dir: .'
   - 'logger_nonblock: true'
   - 'transaction_limit: 0'
   - 'coredump: false'
-  - 'snap_dir: .'
-  - 'log_level: 5'
   - 'wal_mode: write'
-  - 'background: false'
+  - 'log_level: 5'
   - 'panic_on_snap_error: true'
   - 'panic_on_wal_error: false'
-  - 'rows_per_wal: 50'
-  - 'slab_alloc_arena: 0.1'
-  - 'bind_ipaddr: INADDR_ANY'
   - 'readahead: 16320'
-  - 'too_long_threshold: 0.5'
+  - 'primary_port: <number>
+  - 'pid_file: tarantool.pid'
+  - 'slab_alloc_minimal: 64'
+  - 'background: false'
   - 'wal_dir_rescan_delay: 0.1'
 ...
 -- must be read-only
@@ -41,26 +39,24 @@ t = {} for k,v in pairs(box.cfg) do if type(v) ~= 'table' and type(v) ~= 'functi
 ...
 t
 ---
-- - 'pid_file: tarantool.pid'
+- - 'too_long_threshold: 0.5'
   - 'slab_alloc_factor: 2'
-  - 'slab_alloc_minimal: 64'
+  - 'rows_per_wal: 50'
   - 'admin_port: <number>
-  - 'primary_port: <number>
+  - 'slab_alloc_arena: 0.1'
   - 'wal_dir: .'
   - 'logger_nonblock: true'
   - 'transaction_limit: 0'
   - 'coredump: false'
-  - 'snap_dir: .'
-  - 'log_level: 5'
   - 'wal_mode: write'
-  - 'background: false'
+  - 'log_level: 5'
   - 'panic_on_snap_error: true'
   - 'panic_on_wal_error: false'
-  - 'rows_per_wal: 50'
-  - 'slab_alloc_arena: 0.1'
-  - 'bind_ipaddr: INADDR_ANY'
   - 'readahead: 16320'
-  - 'too_long_threshold: 0.5'
+  - 'primary_port: <number>
+  - 'pid_file: tarantool.pid'
+  - 'slab_alloc_minimal: 64'
+  - 'background: false'
   - 'wal_dir_rescan_delay: 0.1'
 ...
 --# clear filter

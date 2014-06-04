@@ -27,6 +27,8 @@
  * SUCH DAMAGE.
  */
 #include "evio.h"
+#include "port-uri.h"
+#include "scoped_guard.h"
 #include <stdio.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -82,7 +84,7 @@ evio_socket(struct ev_io *coio, int domain, int type, int protocol)
 	/* Don't leak fd if setsockopt fails. */
 	coio->fd = sio_socket(domain, type, protocol);
 	if (type == SOCK_STREAM) {
-		evio_setsockopt_tcp(coio->fd);
+		evio_setsockopt_tcp(coio->fd, domain);
 	} else {
 		sio_setfl(coio->fd, O_NONBLOCK, 1);
 	}
@@ -91,7 +93,7 @@ evio_socket(struct ev_io *coio, int domain, int type, int protocol)
 
 /** Set common tcp socket client options. */
 void
-evio_setsockopt_tcp(int fd)
+evio_setsockopt_tcp(int fd, int family)
 {
 	int on = 1;
 	/* In case this throws, the socket is not leaked. */
@@ -106,8 +108,8 @@ evio_setsockopt_tcp(int fd)
 	 * bandwidth, and we usually write entire
 	 * request/response in a single syscall.
 	 */
-	sio_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY,
-		       &on, sizeof(on));
+	if (family != AF_UNIX)
+		sio_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
 }
 
 /** Set tcp options for server sockets. */
@@ -141,12 +143,11 @@ evio_bind_addrinfo(struct ev_io *evio, struct addrinfo *ai)
 	assert(! evio_is_active(evio));
 	int fd = -1;
 	while (ai) {
-		struct sockaddr_in *addr = (struct sockaddr_in *)ai->ai_addr;
 		try {
 			fd = sio_socket(ai->ai_family, ai->ai_socktype,
 					ai->ai_protocol);
 			evio_setsockopt_tcpserver(fd);
-			if (sio_bind(fd, addr, ai->ai_addrlen) == 0) {
+			if (sio_bind(fd, ai->ai_addr, ai->ai_addrlen) == 0) {
 				evio->fd = fd;
 				return; /* success. */
 			}
@@ -161,12 +162,6 @@ evio_bind_addrinfo(struct ev_io *evio, struct addrinfo *ai)
 		ai = ai->ai_next;
 	}
 	tnt_raise(SocketError, evio->fd, "evio_bind_addrinfo()");
-}
-
-static inline int
-evio_service_port(struct evio_service *service)
-{
-	return ntohs(service->addr.sin_port);
 }
 
 static inline const char *
@@ -188,19 +183,20 @@ evio_service_accept_cb(ev_loop * /* loop */, ev_io *watcher,
 	int fd = -1;
 
 	try {
-		struct sockaddr_in addr;
+		struct sockaddr_storage addr;
 		socklen_t addrlen = sizeof(addr);
-		fd = sio_accept(service->ev.fd, &addr, &addrlen);
+		fd = sio_accept(service->ev.fd,
+			(struct sockaddr *)&addr, &addrlen);
 
 		if (fd < 0) /* EAGAIN, EWOULDLOCK, EINTR */
 			return;
 		/* set common tcp options */
-		evio_setsockopt_tcp(fd);
+		evio_setsockopt_tcp(fd, service->port.addr.sa_family);
 		/*
 		 * Invoke the callback and pass it the accepted
 		 * socket.
 		 */
-		service->on_accept(service, fd, &addr);
+		service->on_accept(service, fd, (struct sockaddr *)&addr, addrlen);
 
 	} catch (Exception *e) {
 		if (fd >= 0)
@@ -219,19 +215,20 @@ static int
 evio_service_bind_and_listen(struct evio_service *service)
 {
 	/* Create a socket. */
-	int fd = sio_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	int fd = sio_socket(service->port.addr.sa_family,
+		SOCK_STREAM, IPPROTO_TCP);
 
 	try {
 		evio_setsockopt_tcpserver(fd);
 
-		if (sio_bind(fd, &service->addr, sizeof(service->addr)) ||
-		    sio_listen(fd)) {
+		if (sio_bind(fd, &service->port.addr,
+				service->port.addr_len) || sio_listen(fd)) {
 			assert(errno == EADDRINUSE);
 			close(fd);
 			return -1;
 		}
-		say_info("bound to %s port %i", evio_service_name(service),
-			 evio_service_port(service));
+		say_info("bound to %s port %s", evio_service_name(service),
+			port_uri_to_string(&service->port));
 
 		/* Invoke on_bind callback if it is set. */
 		if (service->on_bind)
@@ -265,23 +262,20 @@ evio_service_timer_cb(ev_loop *loop, ev_timer *watcher, int /* revents */)
 void
 evio_service_init(ev_loop *loop,
 		  struct evio_service *service, const char *name,
-		  const char *host, int port,
+		  const char *uri,
 		  void (*on_accept)(struct evio_service *, int,
-				    struct sockaddr_in *),
+				    struct sockaddr *, socklen_t),
 		  void *on_accept_param)
 {
 	memset(service, 0, sizeof(struct evio_service));
 	snprintf(service->name, sizeof(service->name), "%s", name);
 
 	service->loop = loop;
-	service->addr.sin_family = AF_INET;
-	service->addr.sin_port = htons(port);
-	if (strcmp(host, "INADDR_ANY") == 0) {
-		service->addr.sin_addr.s_addr = INADDR_ANY;
-	} else if (inet_aton(host, &service->addr.sin_addr) == 0) {
-		tnt_raise(SocketError, -1, "invalid address for bind: %s",
-			  host);
-	}
+
+
+	if (!port_uri_parse(&service->port, uri))
+		tnt_raise(SocketError, -1, "invalid address for bind: %s", uri);
+
 	service->on_accept = on_accept;
 	service->on_accept_param = on_accept_param;
 	/*
@@ -305,10 +299,10 @@ evio_service_start(struct evio_service *service)
 
 	if (evio_service_bind_and_listen(service)) {
 		/* Try again after a delay. */
-		say_warn("%s port %i is already in use, will "
+		say_warn("%s port %s is already in use, will "
 			 "retry binding after %lf seconds.",
 			 evio_service_name(service),
-			 evio_service_port(service), BIND_RETRY_DELAY);
+			 port_uri_to_string(&service->port), BIND_RETRY_DELAY);
 
 		ev_timer_set(&service->timer,
 			     BIND_RETRY_DELAY, BIND_RETRY_DELAY);
@@ -325,5 +319,8 @@ evio_service_stop(struct evio_service *service)
 	} else {
 		ev_io_stop(service->loop, &service->ev);
 		close(service->ev.fd);
+		if (service->port.addr.sa_family == AF_UNIX) {
+			unlink(service->port.un.sun_path);
+		}
 	}
 }

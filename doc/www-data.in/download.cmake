@@ -2,7 +2,8 @@ download:
     main: |
         # All downloads
 
-        All published releases are available at [http://tarantool.org/dist].
+        All published releases are available at
+        [http://tarantool.org/dist/master].
 
         # How to choose the right version for download
 
@@ -14,10 +15,10 @@ download:
         The version string may also contain a git revision id, to ease
         identification of the unqiue commit used to generate the build.
 
-        The current version of the stable branch is **@PACKAGE_VERSION@**.
+        The current version of the master branch is **@PACKAGE_VERSION@**.
 
         An automatic build system creates, tests and publishes packages
-        for every push into the stable branch. All binary packages contain
+        for every push into the master branch. All binary packages contain
         symbol information. Additionally, **-debug-**
         packages contain asserts and are compiled without optimization.
 
@@ -26,7 +27,7 @@ download:
         The latest source archive is [tarantool-@PACKAGE_VERSION@-src.tar.gz]
         Please consult with README for build instructions on your system.
         
-        [tarantool-@PACKAGE_VERSION@-src.tar.gz]: http://tarantool.org/dist/tarantool-@PACKAGE_VERSION@-src.tar.gz 
+        [tarantool-@PACKAGE_VERSION@-src.tar.gz]: http://tarantool.org/dist/master/tarantool-@PACKAGE_VERSION@-src.tar.gz 
 
         ## Binary downloads
 
@@ -37,7 +38,8 @@ download:
         ### Debian GNU/Linux and Ubuntu
 
         We maintain an always up-to-date Debian GNU/Linux and Ubuntu package
-        repository at [http://tarantool.org/dist/debian] and [http://tarantool.org/dist/ubuntu]
+        repository at [http://tarantool.org/dist/master/debian] and
+        [http://tarantool.org/dist/master/ubuntu]
         respectively.
 
         At the moment the repository contains builds for Debian "Sid", "Jessie",
@@ -51,23 +53,23 @@ download:
 
         # For Debian:
         cat > /etc/apt/sources.list.d/tarantool.list <<- EOF
-        deb http://tarantool.org/dist/debian/ $release main
-        deb-src http://tarantool.org/dist/debian/ $release main
+        deb http://tarantool.org/dist/master/debian/ $release main
+        deb-src http://tarantool.org/dist/master/debian/ $release main
         EOF
 
         # For Ubuntu:
         cat > /etc/apt/sources.list.d/tarantool.list <<- EOF
-        deb http://tarantool.org/dist/ubuntu/ $release main
-        deb-src http://tarantool.org/dist/ubuntu/ $release main
+        deb http://tarantool.org/dist/master/ubuntu/ $release main
+        deb-src http://tarantool.org/dist/master/ubuntu/ $release main
         EOF
 
         sudo apt-get update
-        sudo apt-get install tarantool tarantool-client
+        sudo apt-get install tarantool
         ```
         
         ### CentOS 5-6 and RHEL 5-6
 
-        CentOS repository is available at [http://tarantool.org/dist/centos]
+        CentOS repository is available at [http://tarantool.org/dist/master/centos]
 
         Add the following section to your yum repository list (/etc/yum.repos.d/tarantool.repo)
         to enable it:
@@ -75,14 +77,14 @@ download:
         ```ini
         [tarantool]
         name=CentOS-$releasever - Tarantool
-        baseurl=http://tarantool.org/dist/centos/$releasever/os/$basearch/
+        baseurl=http://tarantool.org/dist/master/centos/$releasever/os/$basearch/
         enabled=1
         gpgcheck=0
         ```
         
         ### Fedora
 
-        Fedora repository is available at [http://tarantool.org/dist/fedora]
+        Fedora repository is available at [http://tarantool.org/dist/master/fedora]
 
         Add the following section to your yum repository list (/etc/yum.repos.d/tarantool.repo)
         to enable it:
@@ -90,7 +92,7 @@ download:
         ```ini
         [tarantool]
         name=Fedora-$releasever - Tarantool
-        baseurl=http://tarantool.org/dist/fedora/$releasever/os/$basearch/
+        baseurl=http://tarantool.org/dist/master/fedora/$releasever/$basearch/
         enabled=1
         gpgcheck=0
         ```
@@ -108,19 +110,6 @@ download:
         
         [layman]: http://wiki.gentoo.org/wiki/Layman
 
-        ### Other Linux distributions
-        <table border=1 title="Download the latest build, @PACKAGE_VERSION@" width=100%>
-        <th colspan=3>Static builds for Linux</th>
-        <tr>
-            <td> Binary tarball (**.tar.gz**) </td>
-            <td align=center> [32-bit] </td>
-            <td align=center> [64-bit] </td>
-        </tr>
-        </table>
-        
-        [32-bit]: http://tarantool.org/dist/tarantool-@PACKAGE_VERSION@-linux-i686.tar.gz
-        [64-bit]: http://tarantool.org/dist/tarantool-@PACKAGE_VERSION@-linux-x86_64.tar.gz
-
         ### FreeBSD
         
         Tarantool is available from the FreeBSD Ports collection
@@ -131,7 +120,7 @@ download:
         You can install Tarantool using homebrew:
         
         ```
-        $ brew install --use-clang http://tarantool.org/dist/tarantool.rb
+        $ brew install https://raw.githubusercontent.com/tarantool/tarantool/stable/extra/tarantool.rb
         ```
         
         Please upgrade `clang` to version 3.2 or later using
@@ -140,33 +129,33 @@ download:
 
         [Apple Developer]: https://developer.apple.com/downloads/
 
-        # Development branch
+        # Old master branch
 
-        In the same manner as for [the stable branch][stable], every push into
-        [the master branch][master] is [available online][builds-m].
-        The server roadmap is maintained on [Github][issues].
+        In the same manner as for [the master branch][master], every push into
+        [the old master][stable] is [available online][builds-s].
+        The server bugs database is maintained on [Github][issues].
         
         [stable]:   http://github.com/tarantool/tarantool/tree/stable
         [master]:   http://github.com/tarantool/tarantool/tree/master
-        [builds-m]: http://tarantool.org/dist/master
-        [issues]:   http://github.com/tarantool/tarantool/issues?labels=feature
+        [builds-s]: http://tarantool.org/dist/stable
+        [issues]:   http://github.com/tarantool/tarantool/issues
 
         ## Connectors
 
-        - Perl driver, [DR:Tarantool](http://search.cpan.org/~unera/DR-Tarantool-0.37/lib/DR/Tarantool.pm)
+        - Perl driver, [DR:Tarantool](http://search.cpan.org/~unera/DR-Tarantool-0.42/lib/DR/Tarantool.pm)
         - Java driver, [Maven repository](http://dgreenru.github.com/tarantool-java)
         - Ruby driver, [https://github.com/mailru/tarantool-ruby]
         - Python driver, [http://pypi.python.org/pypi/tarantool]
         - PHP driver, [https://github.com/tarantool/tarantool-php]
         - node.js driver, [https://github.com/devgru/node-tarantool]
         - Erlang driver, [https://github.com/rtsisyk/etarantool]
-        - C connector [is maintained in the server source tree](https://github.com/tarantool/tarantool/blob/master/connector/c)
+        - C connector [https://github.com/tarantool/tarantool-c]
         
-        [http://tarantool.org/dist]: http://tarantool.org/dist
-        [http://tarantool.org/dist/debian]: http://tarantool.org/dist/debian
-        [http://tarantool.org/dist/ubuntu]: http://tarantool.org/dist/ubuntu
-        [http://tarantool.org/dist/centos]: http://tarantool.org/dist/centos
-        [http://tarantool.org/dist/fedora]: http://tarantool.org/dist/fedora
+        [http://tarantool.org/dist/master]: http://tarantool.org/dist/master
+        [http://tarantool.org/dist/master/debian]: http://tarantool.org/dist/master/debian
+        [http://tarantool.org/dist/master/ubuntu]: http://tarantool.org/dist/master/ubuntu
+        [http://tarantool.org/dist/master/centos]: http://tarantool.org/dist/master/centos
+        [http://tarantool.org/dist/master/fedora]: http://tarantool.org/dist/master/fedora
         [https://github.com/mailru/tarantool-ruby]: https://github.com/mailru/tarantool-ruby
         [http://pypi.python.org/pypi/tarantool]: http://pypi.python.org/pypi/tarantool
         [https://github.com/tarantool/tarantool-php]: https://github.com/tarantool/tarantool-php

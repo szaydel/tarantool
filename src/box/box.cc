@@ -31,14 +31,13 @@
 #include <sys/wait.h>
 
 #include <errcode.h>
-#include <recovery.h>
+#include "recovery.h"
 #include "replica.h"
-#include <log_io.h>
-#include <pickle.h>
+#include "log_io.h"
 #include <say.h>
 #include <admin.h>
 #include <iproto.h>
-#include <replication.h>
+#include "replication.h"
 #include <stat.h>
 #include <tarantool.h>
 #include "tuple.h"
@@ -46,6 +45,7 @@
 #include "schema.h"
 #include "engine.h"
 #include "engine_memtx.h"
+#include "engine_sophia.h"
 #include "space.h"
 #include "port.h"
 #include "request.h"
@@ -53,8 +53,8 @@
 #include "fiber.h"
 #include "access.h"
 #include "cfg.h"
+#include "iobuf.h"
 
-static void process_replica(struct port *port, struct request *request);
 static void process_ro(struct port *port, struct request *request);
 static void process_rw(struct port *port, struct request *request);
 box_process_func box_process = process_ro;
@@ -151,9 +151,9 @@ process_rw(struct port *port, struct request *request)
                 autocommit = true;
         }
 	try {
-                stat_collect(stat_base, request->code, 1);
+                stat_collect(stat_base, request->type, 1);
                 request->execute(request, txn, port);
-                if (iproto_request_is_update(request->code)) {
+                if (iproto_request_is_update(request->type)) {
                         port_send_tuple(port, txn);
                 }
                 if (autocommit) {
@@ -169,67 +169,49 @@ process_rw(struct port *port, struct request *request)
 }
 
 static void
-process_replica(struct port *port, struct request *request)
-{
-	if (!iproto_request_is_select(request->code)) {
-		tnt_raise(ClientError, ER_NONMASTER,
-			  cfg_gets("replication_source"));
-	}
-	return process_rw(port, request);
-}
-
-static void
 process_ro(struct port *port, struct request *request)
 {
-	if (!iproto_request_is_select(request->code))
+	if (!iproto_request_is_select(request->type))
 		tnt_raise(LoggedError, ER_SECONDARY);
 	return process_rw(port, request);
 }
 
-static int
-recover_row(void *param __attribute__((unused)),
-	    struct iproto_packet *packet)
+static void
+recover_row(void *param __attribute__((unused)), struct iproto_header *row)
 {
         struct request request;
 	try {
-		assert(packet->bodycnt == 1); /* always 1 for read */
-                if ((packet->flags & (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS)) == (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS)) {
+		assert(row->bodycnt == 1); /* always 1 for read */
+                if ((row->flags & (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS)) == (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS)) {
                         box_start_trans();
                 }
-		request_create(&request, packet->code);
-		request_decode(&request, (const char *) packet->body[0].iov_base,
-                               packet->body[0].iov_len);
-		request.packet = packet;
+		request_create(&request, row->type);
+		request_decode(&request, (const char *) row->body[0].iov_base,
+                               row->body[0].iov_len);
+		request.header = row;
 		process_rw(&null_port, &request);
-                if ((packet->flags & (WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT)) == WAL_REQ_FLAG_IN_TRANS) {
+                if ((row->flags & (WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT)) == WAL_REQ_FLAG_IN_TRANS) {
                         box_commit_trans(&null_port);
                 }
 	} catch (Exception *e) {
 		e->log();
-                if (packet->flags & WAL_REQ_FLAG_IN_TRANS) {
+                if (row->flags & WAL_REQ_FLAG_IN_TRANS) {
                         try {
                                 box_rollback_trans();
                         } catch (Exception *x) {
                                 x->log();
                         }
                 }
-		return -1;
 	}
-
-	return 0;
 }
 
 static void
 box_enter_master_or_replica_mode(const char *replication_source)
 {
+	box_process = process_rw;
 	if (replication_source != NULL) {
-		box_process = process_replica;
-
-		recovery_wait_lsn(recovery_state, recovery_state->lsn);
 		recovery_follow_remote(recovery_state, replication_source);
-
 	} else {
-		box_process = process_rw;
 		title("primary", NULL);
 		say_info("I am primary");
 	}
@@ -314,12 +296,6 @@ box_set_replication_source(const char *source)
 }
 
 extern "C" void
-box_set_wal_fsync_delay(double delay)
-{
-	recovery_update_fsync_delay(recovery_state, delay);
-}
-
-extern "C" void
 box_set_wal_mode(const char *mode_name)
 {
 	box_check_wal_mode(mode_name);
@@ -380,9 +356,62 @@ box_leave_local_standby_mode(void *data __attribute__((unused)))
 	recovery_finalize(recovery_state);
 
 	box_set_wal_mode(cfg_gets("wal_mode"));
-	box_set_wal_fsync_delay(cfg_getd("wal_fsync_delay"));
 
 	box_enter_master_or_replica_mode(cfg_gets("replication_source"));
+}
+
+/**
+ * @brief Called when recovery/replication wants to add a new node
+ * to cluster.
+ * cluster_add_node() is called as a commit trigger on _cluster
+ * space and actually adds the node to the cluster.
+ * @param node_uuid
+ */
+static void
+box_on_cluster_join(const tt_uuid *node_uuid)
+{
+	struct space *space = space_cache_find(SC_CLUSTER_ID);
+	class Index *index = index_find(space, 0);
+	struct iterator *it = index->position();
+	index->initIterator(it, ITER_LE, NULL, 0);
+	struct tuple *tuple = it->next(it);
+	uint32_t node_id = tuple ? tuple_field_u32(tuple, 0) + 1 : 1;
+
+	struct request req;
+	request_create(&req, IPROTO_INSERT);
+	req.space_id = SC_CLUSTER_ID;
+	char buf[128];
+	char *data = buf;
+	data = mp_encode_array(data, 2);
+	data = mp_encode_uint(data, node_id);
+	data = mp_encode_str(data, tt_uuid_str(node_uuid), UUID_STR_LEN);
+	assert(data <= buf + sizeof(buf));
+	req.tuple = buf;
+	req.tuple_end = data;
+	process_rw(&null_port, &req);
+}
+
+static void
+box_set_cluster_uuid()
+{
+	/* Save Cluster-UUID to _schema space */
+	tt_uuid cluster_uuid;
+	tt_uuid_create(&cluster_uuid);
+
+	const char *key = "cluster";
+	struct request req;
+	request_create(&req, IPROTO_INSERT);
+	req.space_id = SC_SCHEMA_ID;
+	char buf[128];
+	char *data = buf;
+	data = mp_encode_array(data, 2);
+	data = mp_encode_str(data, key, strlen(key));
+	data = mp_encode_str(data, tt_uuid_str(&cluster_uuid), UUID_STR_LEN);
+	assert(data <= buf + sizeof(buf));
+	req.tuple = buf;
+	req.tuple_end = data;
+
+	process_rw(&null_port, &req);
 }
 
 void
@@ -401,6 +430,10 @@ engine_init()
 {
 	MemtxFactory *memtx = new MemtxFactory();
 	engine_register(memtx);
+
+	SophiaFactory *sophia = new SophiaFactory();
+	sophia->init();
+	engine_register(sophia);
 }
 
 void
@@ -423,7 +456,7 @@ box_init()
 
 	/* recovery initialization */
 	recovery_init(cfg_gets("snap_dir"), cfg_gets("wal_dir"),
-		      recover_row, NULL, box_snapshot_cb,
+		      recover_row, NULL, box_snapshot_cb, box_on_cluster_join,
 		      cfg_geti("rows_per_wal"));
 	recovery_update_io_rate_limit(recovery_state,
 				      cfg_getd("snap_io_rate_limit"));
@@ -435,9 +468,22 @@ box_init()
 				  IPROTO_DML_REQUEST_MAX);
         SessionGuard session_guard(-1, 0);
 
-	recover_snap(recovery_state, cfg_gets("replication_source"));
+	const char *replication_source = cfg_gets("replication_source");
+	if (recovery_has_data(recovery_state)) {
+		/* Process existing snapshot */
+		recover_snap(recovery_state);
+	} else if (replication_source != NULL) {
+		/* Initialize a new replica */
+		replica_bootstrap(recovery_state, replication_source);
+		snapshot_save(recovery_state);
+	} else {
+		/* Initialize a master node of a new cluster */
+		cluster_bootstrap(recovery_state);
+		box_set_cluster_uuid();
+		snapshot_save(recovery_state);
+	}
+
 	space_end_recover_snapshot();
-	recover_existing_wals(recovery_state);
 	space_end_recover();
 
 	stat_cleanup(stat_base, IPROTO_DML_REQUEST_MAX);
@@ -445,21 +491,19 @@ box_init()
 	recovery_follow_local(recovery_state,
 			      cfg_getd("wal_dir_rescan_delay"));
 	title("hot_standby", NULL);
-	const char *bind_ipaddr = cfg_gets("bind_ipaddr");
-	int primary_port = cfg_geti("primary_port");
-	int admin_port = cfg_geti("admin_port");
+
+	const char *primary_port = cfg_gets("primary_port");
+	const char *admin_port = cfg_gets("admin_port");
+
 	/*
-	 * If neither of the ports is set, become a master right
-	 * away (e.g. this is interactive mode or other
 	 * application server configuration).
 	 */
-	if (primary_port == 0 && admin_port == 0)
+	if (!primary_port && !admin_port)
 		box_leave_local_standby_mode(NULL);
 	else {
 		void (*on_bind)(void *) = NULL;
 		if (primary_port) {
-			iproto_init(bind_ipaddr, primary_port,
-				    cfg_geti("readahead"));
+			iproto_init(primary_port);
 		} else {
 			/*
 			 * If no prmary port is given, leave local
@@ -470,7 +514,7 @@ box_init()
 			on_bind = box_leave_local_standby_mode;
 		}
 		if (admin_port)
-			admin_init(bind_ipaddr, admin_port, on_bind);
+			admin_init(admin_port, on_bind);
 	}
 	if (cfg_getd("io_collect_interval") > 0) {
 		ev_set_io_collect_interval(loop(),
@@ -478,6 +522,7 @@ box_init()
 	}
 	too_long_threshold = cfg_getd("too_long_threshold");
 	multistatement_transaction_limit = cfg_geti("transaction_limit");
+	iobuf_set_readahead(cfg_geti("readahead"));
 }
 
 static void
@@ -491,16 +536,16 @@ snapshot_write_tuple(struct log_io *l,
 	body.v_space_id = mp_bswap_u32(n);
 	body.k_tuple = IPROTO_TUPLE;
 
-	struct iproto_packet packet;
-	memset(&packet, 0, sizeof(packet));
-	packet.code = IPROTO_INSERT;
+	struct iproto_header row;
+	memset(&row, 0, sizeof(struct iproto_header));
+	row.type = IPROTO_INSERT;
 
-	packet.bodycnt = 2;
-	packet.body[0].iov_base = &body;
-	packet.body[0].iov_len = sizeof(body);
-	packet.body[1].iov_base = tuple->data;
-	packet.body[1].iov_len = tuple->bsize;
-	snapshot_write_row(l, &packet);
+	row.bodycnt = 2;
+	row.body[0].iov_base = &body;
+	row.body[0].iov_len = sizeof(body);
+	row.body[1].iov_base = tuple->data;
+	row.body[1].iov_len = tuple->bsize;
+	snapshot_write_row(l, &row);
 }
 
 static void
@@ -561,14 +606,6 @@ box_snapshot(void)
 
 	exit(EXIT_SUCCESS);
 	return 0;
-}
-
-void
-box_init_storage(const char *dirname)
-{
-	struct log_dir dir = snap_dir;
-	dir.dirname = (char *) dirname;
-	init_storage_on_master(&dir);
 }
 
 void

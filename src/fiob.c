@@ -28,7 +28,7 @@ struct fiob {
 #ifdef HAVE_FUNOPEN
 	struct {
 		int     (*read)(void *cookie, char *buf, int len);
-		int     (*write)(void *cookie, char *buf, int len);
+		int     (*write)(void *cookie, const char *buf, int len);
 		fpos_t  (*seek)(void *cookie, fpos_t pos, int whence);
 		int     (*close)(void *cookie);
 	} io;
@@ -305,6 +305,18 @@ fiob_open(const char *path, const char *mode)
 	f->bsize = bsize;
 
 	f->fd = open(path, flags, omode);
+#ifdef O_DIRECT
+	if (f->fd < 0 && (flags & O_DIRECT) && errno == EINVAL) {
+		/*
+		 * Some filesystems don't support O_DIRECT mode (e.g. tmpfs).
+		 * With O_CREAT|O_DIRECT flags Linux normally creates inode
+		 * in directory and then fails on trying to open it.
+		 * Try to re-open created file without O_DIRECT|O_CREATE flags.
+		 */
+		flags &= ~(int) (O_DIRECT | O_CREAT);
+		f->fd = open(path, flags, omode);
+	}
+#endif /* O_DIRECT */
 	if (f->fd < 0)
 		goto error;
 

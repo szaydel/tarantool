@@ -3,6 +3,7 @@
 --------------------------------------------------------------------------------
 
 ffi = require('ffi')
+msgpack = require('msgpack')
 msgpackffi = require('msgpackffi')
 
 msgpack.encode()
