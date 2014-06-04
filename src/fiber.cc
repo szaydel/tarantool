@@ -61,6 +61,9 @@ fiber_call(struct fiber *callee, ...)
 	assert(caller);
 
         if (caller->on_reschedule_callback) { 
+                if (caller->session == NULL) { 
+                        caller->session = callee->session;
+                }           
                 caller->on_reschedule_callback();
         }
 
@@ -206,6 +209,9 @@ fiber_yield(void)
 	struct fiber *caller = cord->fiber;
 
         if (caller->on_reschedule_callback) { 
+                if (caller->session == NULL) { 
+                        caller->session = callee->session;
+                }           
                 caller->on_reschedule_callback();
         }
 

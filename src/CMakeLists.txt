@@ -157,15 +157,13 @@ set(TARANTOOL_CXX_FLAGS ${CMAKE_CXX_FLAGS} PARENT_SCOPE)
 
 add_executable(tarantool tarantool.cc)
 add_dependencies(tarantool build_bundled_libs)
-target_link_libraries(tarantool
-    box
-    ${sophia_lib}
-    ${common_libraries}
-    -rdynamic)
+if (NOT TARGET_OS_DARWIN)
+    target_link_libraries(tarantool box ${common_libraries} -rdynamic)
+else()
+    target_link_libraries(tarantool box ${common_libraries})
+endif()
 
-# Necessary to make LuaJIT work on Darwin, see
-# http://luajit.org/install.html
-if (TARGET_OS_DARWIN)
+if (module_link_flags)
     set_target_properties(tarantool PROPERTIES
         LINK_FLAGS "-pagezero_size 10000 -image_base 100000000")
 endif()
