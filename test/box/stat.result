@@ -56,9 +56,6 @@ box.stat()
   AUTH:
     total: 0
     rps: 0
-  AUTH:
-    total: 0
-    rps: 0
   CALL:
     total: 0
     rps: 0

@@ -8,11 +8,11 @@ for i = 1,100,1 do space:insert({i, 100}) end
 ---
 ...
 --# setopt delimiter ';'
-for i = 1,99,1 do 
-    box.begin()
+for i = 1,99,1 do
+    space:begin()
     space:update({i}, {{'-', 1, 50}})
     space:update({i+1}, {{'+', 1, 50}})
-    box.commit()
+    space:commit()
 end;
 ---
 ...
@@ -22,10 +22,10 @@ space:select{100}
 - - [100, 150]
 ...
 --# setopt delimiter ';'
-for i = 1,1,1 do 
-    box.begin()
+for i = 1,1,1 do
+    space:begin()
     space:update({100}, {{'-', 1, 100}})
-    box.rollback()
+    space:rollback()
 end;
 ---
 ...

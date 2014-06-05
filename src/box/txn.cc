@@ -130,12 +130,13 @@ txn_commit(struct txn *txn)
                 if ((tr->old_tuple || tr->new_tuple) &&
                     !space_is_temporary(tr->space))
                 {
-			struct iproto_header* row = tr->row;
-			assert(recovery_state->wal_mode == WAL_NONE ||
-			       row != NULL);
-			row->flags = flags;
-			last_row = row;
-			flags &= ~WAL_REQ_FLAG_IS_FIRST;
+			if (recovery_state->wal_mode != WAL_NONE) {
+				struct iproto_header* row = tr->row;
+				assert(row != NULL);
+				row->flags = flags;
+				last_row = row;
+				flags &= ~WAL_REQ_FLAG_IS_FIRST;
+			}
 		}
         } while ((tr = tr->next) != NULL);
 
@@ -144,33 +145,33 @@ txn_commit(struct txn *txn)
                         last_row->flags &= ~WAL_REQ_FLAG_IN_TRANS;
                 }
                 last_row->flags &= ~WAL_REQ_FLAG_HAS_NEXT;
-                // And now send rows to WAL writers
-                tr = &txn->req;
-                do {
-                        if ((tr->old_tuple || tr->new_tuple) &&
-                            !space_is_temporary(tr->space))
-                        {
-                                struct iproto_header* row = tr->row;
-				int res = 0;
-				/* txn_commit() must be done after txn_add_redo() */
-				assert(recovery_state->wal_mode == WAL_NONE ||
-				       row != NULL);
-				ev_tstamp start = ev_now(loop()), stop;
-				res = wal_write(recovery_state, row);
-				stop = ev_now(loop());
+	}
+	// And now send rows to WAL writers
+	tr = &txn->req;
+	do {
+		if ((tr->old_tuple || tr->new_tuple) &&
+		    !space_is_temporary(tr->space))
+		{
+			struct iproto_header* row = tr->row;
+			int res = 0;
+			/* txn_commit() must be done after txn_add_redo() */
+			assert(recovery_state->wal_mode == WAL_NONE ||
+			       row != NULL);
+			ev_tstamp start = ev_now(loop()), stop;
+			res = wal_write(recovery_state, row);
+			stop = ev_now(loop());
 
-				if (stop - start > too_long_threshold && row != NULL) {
-					say_warn("too long %s: %.3f sec",
-						 iproto_request_name(row->type),
-						 stop - start);
-				}
+			if (stop - start > too_long_threshold && row != NULL) {
+				say_warn("too long %s: %.3f sec",
+					 iproto_request_name(row->type),
+					 stop - start);
+			}
 
-				if (res)
-					tnt_raise(LoggedError, ER_WAL_IO);
+			if (res)
+				tnt_raise(LoggedError, ER_WAL_IO);
+		}
+	} while ((tr = tr->next) != NULL);
 
-                        }
-                } while ((tr = tr->next) != NULL);
-        }
         trigger_run(&txn->on_commit, txn); /* must not throw. */
 }
 

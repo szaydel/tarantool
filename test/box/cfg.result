@@ -2,7 +2,7 @@
 --# push filter 'admin_port: .*' to 'admin_port: <number>'
 box.cfg.nosuchoption = 1
 ---
-- error: '[string "-- load_cfg.lua - internal file..."]:108: Attempt to modify a read-only
+- error: '[string "-- load_cfg.lua - internal file..."]:111: Attempt to modify a read-only
     table'
 ...
 t = {} for k,v in pairs(box.cfg) do if type(v) ~= 'table' and type(v) ~= 'function' then table.insert(t, k..': '..tostring(v)) end end
@@ -12,22 +12,23 @@ t
 ---
 - - 'too_long_threshold: 0.5'
   - 'slab_alloc_factor: 2'
-  - 'rows_per_wal: 50'
+  - 'slab_alloc_minimal: 64'
   - 'admin_port: <number>
-  - 'slab_alloc_arena: 0.1'
-  - 'wal_dir: .'
+  - 'primary_port: <number>
+  - 'log_level: 5'
   - 'logger_nonblock: true'
   - 'transaction_limit: 0'
   - 'coredump: false'
+  - 'pid_file: tarantool.pid'
   - 'wal_mode: write'
-  - 'log_level: 5'
+  - 'snap_dir: .'
   - 'panic_on_snap_error: true'
   - 'panic_on_wal_error: false'
-  - 'readahead: 16320'
-  - 'primary_port: <number>
-  - 'pid_file: tarantool.pid'
-  - 'slab_alloc_minimal: 64'
+  - 'wal_dir: .'
+  - 'rows_per_wal: 50'
+  - 'slab_alloc_arena: 0.1'
   - 'background: false'
+  - 'readahead: 16320'
   - 'wal_dir_rescan_delay: 0.1'
 ...
 -- must be read-only
@@ -41,22 +42,23 @@ t
 ---
 - - 'too_long_threshold: 0.5'
   - 'slab_alloc_factor: 2'
-  - 'rows_per_wal: 50'
+  - 'slab_alloc_minimal: 64'
   - 'admin_port: <number>
-  - 'slab_alloc_arena: 0.1'
-  - 'wal_dir: .'
+  - 'primary_port: <number>
+  - 'log_level: 5'
   - 'logger_nonblock: true'
   - 'transaction_limit: 0'
   - 'coredump: false'
+  - 'pid_file: tarantool.pid'
   - 'wal_mode: write'
-  - 'log_level: 5'
+  - 'snap_dir: .'
   - 'panic_on_snap_error: true'
   - 'panic_on_wal_error: false'
-  - 'readahead: 16320'
-  - 'primary_port: <number>
-  - 'pid_file: tarantool.pid'
-  - 'slab_alloc_minimal: 64'
+  - 'wal_dir: .'
+  - 'rows_per_wal: 50'
+  - 'slab_alloc_arena: 0.1'
   - 'background: false'
+  - 'readahead: 16320'
   - 'wal_dir_rescan_delay: 0.1'
 ...
 --# clear filter

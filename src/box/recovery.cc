@@ -1446,8 +1446,9 @@ snapshot_save(struct recovery_state *r)
 	int64_t lsnsum = vclock_signature(&r->vclock);
 	snap = log_io_open_for_write(&r->snap_dir, lsnsum, &r->node_uuid,
 				     INPROGRESS);
-	if (snap == NULL)
+	if (snap == NULL) {
 		panic_status(errno, "Failed to save snapshot: failed to open file in write mode.");
+	}
 	/*
 	 * While saving a snapshot, snapshot name is set to
 	 * <lsn>.snap.inprogress. When done, the snapshot is

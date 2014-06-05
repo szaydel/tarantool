@@ -27,6 +27,7 @@
  * SUCH DAMAGE.
  */
 #include "small/mempool.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "small/slab_cache.h"
@@ -117,6 +118,7 @@ mslab_free(struct mempool *pool, struct mslab *slab, void *ptr)
 	uint32_t idx = mslab_idx(slab, ptr);
 	uint32_t bit_no = idx & (MEMPOOL_MAP_BIT-1);
 	idx /= MEMPOOL_MAP_BIT;
+	assert((slab->map[idx] & (((mbitmap_t) 1) << bit_no)) == 0);
 	slab->map[idx] |= ((mbitmap_t) 1) << bit_no;
 	slab->nfree++;
 	if (idx < slab->ffi)

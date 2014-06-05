@@ -24,7 +24,6 @@ t
   - net
   - pack
   - raise
-  - rollback
   - schema
   - slab
   - snapshot
@@ -194,6 +193,7 @@ t;
   - 'box.error.ER_EXACT_MATCH : 19'
   - 'box.error.ER_CREATE_USER : 43'
   - 'box.error.ER_FUNCTION_EXISTS : 52'
+  - 'box.error.ER_YIELD_NOT_ALLOWED : 73'
   - 'box.error.ER_CLUSTER_ID_MISMATCH : 63'
   - 'box.error.ER_NO_SUCH_FUNCTION : 51'
   - 'box.error.ER_FIBER_STACK : 30'
@@ -205,7 +205,6 @@ t;
   - 'box.error.ER_NO_SUCH_SPACE : 36'
   - 'box.error.ER_NO_SUCH_INDEX : 35'
   - 'box.error.ER_TUPLE_FOUND : 3'
-  - 'box.error.ER_ACCESS_DENIED : 42'
   - 'box.error.ER_CREATE_SPACE : 9'
   - 'box.error.ER_FIELD_TYPE : 23'
   - 'box.error.ER_OK : 0'
@@ -217,6 +216,8 @@ t;
   - 'box.error.ER_SPACE_ACCESS_DENIED : 55'
   - 'box.error.ER_KEY_PART_COUNT : 31'
   - 'box.error.ER_SPACE_EXISTS : 10'
+  - 'box.error.ER_INDEX_FIELD_COUNT : 39'
+  - 'box.error.ER_UNKNOWN_REQUEST_TYPE : 48'
   - 'box.error.ER_TUPLE_IS_TOO_LONG : 27'
   - 'box.error.ER_UNKNOWN_NODE : 62'
   - 'box.error.ER_MODIFY_INDEX : 14'
@@ -227,14 +228,14 @@ t;
   - 'box.error.ER_IDENTIFIER : 70'
   - 'box.error.ER_DROP_SPACE : 11'
   - 'box.error.ER_SPLICE : 25'
-  - 'box.error.ER_UNKNOWN_REQUEST_TYPE : 48'
+  - 'box.error.ER_TRANSACTION_TOO_LONG : 71'
   - 'box.error.ER_PASSWORD_MISMATCH : 47'
   - 'box.error.ER_KEY_PART_TYPE : 18'
   - 'box.error.ER_UNKNOWN_UPDATE_OP : 28'
   - 'box.error.ER_LOCAL_NODE_IS_NOT_ACTIVE : 61'
   - 'box.error.ER_UNSUPPORTED : 5'
   - 'box.error.ER_PROC_LUA : 32'
-  - 'box.error.ER_INDEX_FIELD_COUNT : 39'
+  - 'box.error.ER_NO_ACTIVE_TRANSACTION : 72'
   - 'box.error.ER_DROP_USER : 44'
   - 'box.error.ER_UPDATE_FIELD : 29'
   - 'box.error.ER_ALTER_SPACE : 12'
@@ -388,9 +389,9 @@ dostring('return ...', 1, 2, 3)
 --  A test case for Bug#1043804 lua error() -> server crash
 error()
 ---
-- error:
+- error: 
 ...
---  A test case for bitwise operations
+--  A test case for bitwise operations 
 bit.lshift(1, 32)
 ---
 - 1

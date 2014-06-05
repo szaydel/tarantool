@@ -95,6 +95,7 @@ session_destroy(struct session *session)
 {
 	if (session == NULL) /* no-op for a dead session. */
 		return;
+	assert(session->id != ~0);
 	fiber_set_session(fiber(), session);
 	/* For triggers. */
 	session_set_user(session, ADMIN, ADMIN);
@@ -109,6 +110,7 @@ session_destroy(struct session *session)
 	assert(session->txn == NULL);
 	struct mh_i32ptr_node_t node = { session->id, NULL };
 	mh_i32ptr_remove(session_registry, &node, NULL);
+	session->id = ~0;
 	mempool_free(&session_pool, session);
 }
 

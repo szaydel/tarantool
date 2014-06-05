@@ -25,9 +25,6 @@ box.stat()
   AUTH:
     total: 0
     rps: 0
-  AUTH:
-    total: 0
-    rps: 0
   CALL:
     total: 0
     rps: 0
@@ -53,22 +50,23 @@ box.cfg
 ---
 - too_long_threshold: 0.5
   slab_alloc_factor: 2
-  rows_per_wal: 50
+  slab_alloc_minimal: 64
   admin_port: <number>
-  slab_alloc_arena: 0.1
-  wal_dir: .
+  primary_port: <number>
+  log_level: 5
   logger_nonblock: true
   transaction_limit: 0
   coredump: false
+  pid_file: tarantool.pid
   wal_mode: write
-  log_level: 5
+  snap_dir: .
   panic_on_snap_error: true
   panic_on_wal_error: false
-  readahead: 16320
-  primary_port: <number>
-  pid_file: tarantool.pid
-  slab_alloc_minimal: 64
+  wal_dir: .
+  rows_per_wal: 50
+  slab_alloc_arena: 0.1
   background: false
+  readahead: 16320
   wal_dir_rescan_delay: 0.1
 ...
 box.stat()
@@ -85,9 +83,6 @@ box.stat()
   INSERT:
     total: 35
     rps: 7
-  AUTH:
-    total: 0
-    rps: 0
   AUTH:
     total: 0
     rps: 0

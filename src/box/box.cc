@@ -466,7 +466,6 @@ box_init()
 
 	stat_base = stat_register(iproto_request_type_strs,
 				  IPROTO_DML_REQUEST_MAX);
-        SessionGuard session_guard(-1, 0);
 
 	const char *replication_source = cfg_gets("replication_source");
 	if (recovery_has_data(recovery_state)) {
