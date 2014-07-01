@@ -1573,7 +1573,7 @@ on_commit_dd_cluster(struct trigger *trigger, void *event)
 {
 	(void) trigger;
 	struct txn *txn = (struct txn *) event;
-	struct tuple *new_tuple = txn->req->new_tuple;
+	struct tuple *new_tuple = txn->req.new_tuple;
 	uint32_t id = tuple_field_u32(new_tuple, 0);
 	tt_uuid uuid = tuple_field_uuid(new_tuple, 1);
 
@@ -1606,7 +1606,7 @@ on_replace_dd_cluster(struct trigger *trigger, void *event)
 {
 	(void) trigger;
 	struct txn *txn = (struct txn *) event;
-	struct tuple *new_tuple = txn->req->new_tuple;
+	struct tuple *new_tuple = txn->req.new_tuple;
 	if (new_tuple == NULL)
 		tnt_raise(ClientError, ER_SERVER_ID_IS_RO);
 

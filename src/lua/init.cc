@@ -338,6 +338,8 @@ tarantool_lua_init(const char *tarantool_bin, int argc, char **argv)
 	tarantool_L = L;
 }
 
+char *history = NULL;
+
 extern "C" const char *
 tarantool_error_message(void)
 {

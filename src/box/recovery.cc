@@ -338,10 +338,10 @@ recover_wal(struct recovery_state *r, struct log_io *l)
 		    == (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT))
                 {
                         int64_t lsn = row.lsn;
-			uint32_t node_id = row.node_id;
+			uint32_t node_id = row.server_id;
                         // multistatement transaction
                         do {
-                                if (row.lsn != lsn || row.node_id != node_id
+                                if (row.lsn != lsn || row.server_id != node_id
 				    || !(row.flags & WAL_REQ_FLAG_IN_TRANS))
 				{
                                         row.flags |= WAL_REQ_FLAG_HAS_NEXT;
@@ -790,14 +790,17 @@ wal_schedule_queue(struct wal_fifo *queue, struct wal_writer *writer)
 	struct wal_write_request *req, *tmp;
 	STAILQ_FOREACH_SAFE(req, queue, wal_fifo_entry, tmp) {
                 if (req->row->flags & WAL_REQ_FLAG_IN_TRANS) {
-                        /* Accumulate total result of multistatement transaction in prev_lsn.
+			/* Accumulate total result of
+			 * multistatement transaction in prev_lsn.
                          * Result is 0 (ok) or -1 (error) so use OR.
-                         * Also update req->res, so that last request of multistatement transaction contains cummulative result
+			 * Also update req->res, so that last
+			 * request of multistatement transaction
+			 * contains cumulative result
                          */
 			if (writer->prev_lsn < 0) {
-				req->prev_lsn = -1;
+				req->res = -1;
 			} else {
-				writer->prev_lsn = req->prev_lsn;
+				writer->prev_lsn = req->res;
 			}
                 }
                 if (!(req->row->flags & WAL_REQ_FLAG_HAS_NEXT)) {
@@ -1078,7 +1081,7 @@ wal_write_to_disk(struct recovery_state *r, struct wal_writer *writer,
 	while (req) {
                 bool in_multistatement_trans = (req->row->flags & (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS)) == WAL_REQ_FLAG_IN_TRANS;
                 if (!in_multistatement_trans /* can not switch log until multistatement transaction is finished */
-                    && wal_opt_rotate(wal, batch, r, &writer->vclock) != 0)
+                    && wal_opt_rotate(wal, r, &writer->vclock) != 0)
                 {
                         break;
                 }
@@ -1274,7 +1277,6 @@ snapshot_save(struct recovery_state *r)
 		&r->server_uuid, &r->vclock);
 	if (snap == NULL)
 		panic_status(errno, "Failed to save snapshot: failed to open file in write mode.");
-	}
 	/*
 	 * While saving a snapshot, snapshot name is set to
 	 * <lsn>.snap.inprogress. When done, the snapshot is

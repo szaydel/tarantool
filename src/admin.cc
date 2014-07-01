@@ -52,10 +52,9 @@ extern "C" {
 #include "scoped_guard.h"
 
 static int
-admin_dispatch(struct ev_io *coio, struct iobuf *iobuf, struct tbuf *out, lua_State *L)
+admin_dispatch(struct ev_io *coio, struct iobuf *iobuf, lua_State *L)
 {
 	struct ibuf *in = &iobuf->in;
-	struct tbuf *out = tbuf_new(&fiber()->gc);
 	char delim[SESSION_DELIM_SIZE + 1];
 	/* \n must folow user-specified delimiter */
 	int delim_len = snprintf(delim, sizeof(delim), "%s\n",
@@ -117,7 +116,7 @@ admin_handler(va_list ap)
 
         struct tbuf *out = tbuf_new(&iobuf->pool);
 	for (;;) {
-		if (admin_dispatch(&coio, iobuf, out, L) < 0)
+		if (admin_dispatch(&coio, iobuf, L) < 0)
 			return;
 		iobuf_reset(iobuf);
 		fiber_gc();

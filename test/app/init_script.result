@@ -3,26 +3,27 @@
 --
 
 box.cfg
-1	too_long_threshold:0.5
+1	pid_file:box.pid
 2	slab_alloc_factor:2
 3	slab_alloc_minimal:64
-4	admin_port:3313
+4	background:false
 5	logger:tarantool.log
 6	primary_port:3314
-7	wal_dir:.
+7	log_level:5
 8	logger_nonblock:true
-9	snap_dir:.
+9	transaction_limit:0
 10	coredump:false
-11	wal_mode:write
-12	log_level:5
-13	panic_on_snap_error:true
-14	panic_on_wal_error:false
-15	rows_per_wal:500000
-16	readahead:16320
-17	pid_file:box.pid
-18	background:false
-19	slab_alloc_arena:1
-20	wal_dir_rescan_delay:0.1
+11	too_long_threshold:0.5
+12	wal_mode:write
+13	snap_dir:.
+14	panic_on_snap_error:true
+15	panic_on_wal_error:false
+16	wal_dir:.
+17	slab_alloc_arena:1
+18	rows_per_wal:500000
+19	admin_port:3313
+20	readahead:16320
+21	wal_dir_rescan_delay:0.1
 --
 -- Test insert from detached fiber
 --
