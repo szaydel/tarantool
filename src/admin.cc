@@ -55,15 +55,40 @@ static int
 admin_dispatch(struct ev_io *coio, struct iobuf *iobuf, struct tbuf *out, lua_State *L)
 {
 	struct ibuf *in = &iobuf->in;
+	struct tbuf *out = tbuf_new(&fiber()->gc);
+	char delim[SESSION_DELIM_SIZE + 1];
+	/* \n must folow user-specified delimiter */
+	int delim_len = snprintf(delim, sizeof(delim), "%s\n",
+				 fiber()->session->delim);
+
 	char *eol;
-	while ((eol = (char *) memchr(in->pos, '\n', in->end - in->pos)) == NULL) {
+	while ((eol = (char *) memmem(in->pos, in->end - in->pos, delim,
+				      delim_len)) == NULL) {
 		if (coio_bread(coio, in, 1) <= 0)
 			return -1;
 	}
 	eol[0] = '\0';
-	tarantool_lua(L, out, in->pos);
-	in->pos = (eol + 1);
-	coio_write(coio, out->data, out->size);
+
+	/* get interactive from package.loaded */
+	try {
+		lua_getfield(L, LUA_REGISTRYINDEX, "_LOADED");
+		lua_getfield(L, -1, "console");
+		lua_getfield(L, -1, "eval");
+		lua_pushlstring(L, in->pos, eol - in->pos);
+		lua_call(L, lua_gettop(L) - 3, 1);
+		size_t len;
+		const char *out = lua_tolstring(L, -1, &len);
+		coio_write(coio, out, len);
+		in->pos = (eol + delim_len);
+		lua_settop(L, 0);
+	} catch (Exception *e) {
+		throw;
+	} catch (...) {
+		/* Convert Lua error to a Tarantool exception. */
+		const char *msg = lua_tostring(L, -1);
+		tnt_raise(ClientError, ER_PROC_LUA, msg ? msg : "");
+	}
+
 	return 0;
 }
 

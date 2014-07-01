@@ -85,6 +85,9 @@
 ; the missing value is always assumed to be 0. If the
 ; missing key assumes a string value, the string is assumed
 ; to be empty.
+; If a body has no keys, entire msgpack map for the body
+; may be missing. Such is the case, for example, in <ping>
+; request.
 
 <key> ::= <header_key> | <body_key>
 
@@ -178,7 +181,9 @@
 
 ; <offset> specifies offset in the result set, expects <uint32> value
 ; <limit> specifies limit in the result set, expects a <uint32> value
-; <iterator> specifies the iterator type to use in search
+; <iterator> specifies the iterator type to use in search,
+; an integer constant from the range defined in
+; https://github.com/tarantool/tarantool/blob/master/src/box/index.h#L61
 ; <function_name> is used to give call path for a Lua function
 
 ; <tuple> in <update> must carry a list of update operations:

@@ -50,7 +50,7 @@ t;
 type(box);
 type(box.space);
 t = {};
-for i, v in pairs(space.index[0].parts[0]) do
+for i, v in pairs(space.index[0].parts[1]) do
     table.insert(t, tostring(i)..' : '..tostring(v))
 end;
 t;
@@ -103,7 +103,7 @@ tonumber64('18446744073709551615') == tonumber64('18446744073709551615')
 tonumber64('18446744073709551615') + 1
 tonumber64(-1)
 tonumber64('184467440737095516155')
-string.byte(box.pack('p', tonumber64(123)))
+string.byte(require('msgpack').encode(tonumber64(123)))
 --  A test case for Bug#1061747 'tonumber64 is not transitive'
 tonumber64(tonumber64(2))
 tostring(tonumber64(tonumber64(3)))
@@ -129,16 +129,16 @@ bit.lshift(1, 32)
 bit.band(1, 3)
 bit.bor(1, 2)
 
--- A test case for box.counter
+-- A test case for space:inc and space:dec
 space = box.space.tweedledum
-box.counter.inc(space.id, {1})
+space:inc{1}
 space:get{1}
-box.counter.inc(space.id, {1})
-box.counter.inc(space.id, {1})
+space:inc{1}
+space:inc{1}
 space:get{1}
-box.counter.dec(space.id, {1})
-box.counter.dec(space.id, {1})
-box.counter.dec(space.id, {1})
+space:dec{1}
+space:dec{1}
+space:dec{1}
 space:get{1}
 space:truncate()
 
@@ -202,3 +202,16 @@ type(ffi.metatype('struct test', {
 --# setopt delimiter ''
 -- custom totable function will be called by yaml.encode
 ffi.new('struct test', { a = 15 })
+
+
+
+-------------------------------------------------------------------------------
+-- #346 yaml.null() crases server
+-------------------------------------------------------------------------------
+
+yaml = require('yaml')
+type(yaml.NULL)
+yaml.NULL
+yaml.NULL == nil
+yaml.null() -- for compatibility with luaYAML
+yaml = nil

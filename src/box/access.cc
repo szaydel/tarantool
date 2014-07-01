@@ -131,7 +131,8 @@ struct user *
 user_by_name(const char *name, uint32_t len)
 {
 	uint32_t uid = schema_find_id(SC_USER_ID, 2, name, len);
-	return user_cache_find(uid);
+	struct user *user = user_cache_find(uid);
+	return user && user->type == SC_USER ? user : NULL;
 }
 
 void
@@ -150,6 +151,8 @@ user_cache_init()
 	struct user guest;
 	memset(&guest, 0, sizeof(guest));
 	snprintf(guest.name, sizeof(guest.name), "guest");
+	guest.owner = ADMIN;
+	guest.type = SC_USER;
 	user_cache_replace(&guest);
 	/* 0 is the auth token and user id by default. */
 	assert(guest.auth_token == GUEST &&
@@ -159,7 +162,8 @@ user_cache_init()
 	struct user admin;
 	memset(&admin, 0, sizeof(admin));
 	snprintf(admin.name, sizeof(admin.name), "admin");
-	admin.uid = ADMIN;
+	admin.uid = admin.owner = ADMIN;
+	admin.type = SC_USER;
 	user_cache_replace(&admin);
 	/* ADMIN is both the auth token and user id for 'admin' user. */
 	assert(admin.auth_token == ADMIN &&

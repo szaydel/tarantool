@@ -62,7 +62,8 @@ enum {
  * even when there are more object types in the future.
  */
 enum schema_object_type {
-	SC_UNKNOWN = 0, SC_UNIVERSE = 1, SC_SPACE = 2, SC_FUNCTION = 3
+	SC_UNKNOWN = 0, SC_UNIVERSE = 1, SC_SPACE = 2, SC_FUNCTION = 3,
+	SC_USER = 4, SC_ROLE = 5
 };
 
 enum schema_object_type
@@ -134,6 +135,23 @@ key_def_dup(struct key_def *def)
 		       def->part_count * sizeof(*def->parts));
 	}
 	return dup;
+}
+
+/**
+ * Copy one key def into another, preserving the membership
+ * in rlist. This only works for key defs with equal number of
+ * parts.
+ */
+static inline void
+key_def_copy(struct key_def *to, const struct key_def *from)
+{
+	struct rlist save_link = to->link;
+	int part_count = (to->part_count < from->part_count ?
+			  to->part_count : from->part_count);
+	size_t size  = (sizeof(struct key_def) +
+			sizeof(struct key_part) * part_count);
+	memcpy(to, from, size);
+	to->link = save_link;
 }
 
 /**

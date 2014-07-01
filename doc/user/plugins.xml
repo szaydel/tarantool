@@ -138,22 +138,22 @@ Linking CXX shared library libmysql.so
 
 <prompt>$ </prompt><userinput>~/tarantool/src/tarantool</userinput>
 ~/tarantool/src/tarantool: version 1.6.0-1085-gf6d30a5
-<prompt>tarantool&gt; </prompt>
-
+<prompt>tarantool&gt; </prompt> <userinput>box.cfg{}</userinput>
+...
 # Enter the following lines on the prompt (again, change "/home/pgulutzan"
 # to whatever the real directory is that contains tarantool):
 package.path = "/home/pgulutzan/tarantool/src/module/sql/?.lua;"..package.path
 require("sql")
 if type(box.net.sql) ~= "table" then error("net.sql load failed") end
 require("box.net.mysql")
-# ... Make sure that tarantool replies "true" for the calls to "require()".
+# ... Make sure that tarantool replies "true" for both calls to "require()".
 
 # Create a Lua function that will connect to the MySQL server,
 # (using some factory default values for the port and user and password),
 # retrieve one row, and display the row.
 # For explanations of the statement types used here, read the
 # Lua tutorial earlier in the Tarantool user manual.
-<prompt>tarantool&gt; </prompt><userinput>SETOPT delimiter = '!'</userinput>
+<prompt>tarantool&gt; </prompt><userinput>session = require('session'); session.delimiter('!')</userinput>
 <prompt>tarantool&gt; </prompt><userinput>function mysql_select ()</userinput>
         <prompt>-&gt; </prompt><userinput>  local dbh = box.net.sql.connect(</userinput>
         <prompt>-&gt; </prompt><userinput>      'mysql', '127.0.0.1', 3306, 'root', '', 'test')</userinput>
@@ -166,7 +166,7 @@ require("box.net.mysql")
         <prompt>-&gt; </prompt><userinput>  end!</userinput>
 ---
 ...
-<prompt>tarantool&gt; </prompt><userinput>SETOPT delimiter = ''!</userinput>
+<prompt>tarantool&gt; </prompt><userinput>session.delimiter('')!</userinput>
 <prompt>tarantool&gt; </prompt>
 
 # Execute the Lua function.
@@ -261,7 +261,7 @@ Linking CXX shared library libpg.so
 
 <prompt>$ </prompt><userinput>~/tarantool/src/tarantool</userinput>
 ~/tarantool/src/tarantool: version 1.6.0-1085-gf6d30a5
-<prompt>tarantool&gt; </prompt>
+<prompt>tarantool&gt; </prompt>  <userinput>box.cfg{}</userinput>
 
 # Enter the following lines on the prompt (again, change "/home/pgulutzan"
 # to whatever the real directory is that contains tarantool):
@@ -275,7 +275,7 @@ require("box.net.pg")
 # retrieve one row, and display the row.
 # For explanations of the statement types used here, read the
 # Lua tutorial in the Tarantool user manual.
-<prompt>tarantool&gt; </prompt><userinput>SETOPT delimiter = '!'</userinput>
+<prompt>tarantool&gt; </prompt><userinput>session = require('session'); session.delimiter('!')</userinput>
 <prompt>tarantool&gt; </prompt><userinput>function postgresql_select ()</userinput>
         <prompt>-&gt; </prompt><userinput>  local dbh = box.net.sql.connect(</userinput>
         <prompt>-&gt; </prompt><userinput>      'pg', '127.0.0.1', 5432, 'postgres', 'postgres', 'postgres')</userinput>
@@ -288,7 +288,7 @@ require("box.net.pg")
         <prompt>-&gt; </prompt><userinput>  end!</userinput>
 ---
 ...
-<prompt>tarantool&gt; </prompt><userinput>SETOPT delimiter = ''!</userinput>
+<prompt>tarantool&gt; </prompt><userinput>session.delimiter('')!</userinput>
 <prompt>tarantool&gt; </prompt>
 
 # Execute the Lua function.

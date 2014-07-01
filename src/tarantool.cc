@@ -108,6 +108,16 @@ title(const char *role, const char *fmt, ...)
 		bufptr += snprintf(bufptr, bufend - bufptr, "%s", s);
 	}
 
+#if 0
+	/**
+	 * The below code is broken for two reasons:
+	 * - primary_port and admin_port are no longer integers,
+	 *   but strings
+	 * - title is used in forks, and cfg_geti doesn't work
+	 *   in a fork, since Lua interpreter state is not
+	 *   fork-safe. And it is not fork-safe because it
+	 *   refers to tuple objects, which are not fork-safe.
+	 */
 	int ports[] = { cfg_geti("primary_port"), cfg_geti("admin_port") };
 	int *pptr = ports;
 	const char *names[] = { "pri", "adm", NULL };
@@ -117,6 +127,7 @@ title(const char *role, const char *fmt, ...)
 		if (*pptr)
 			bufptr += snprintf(bufptr, bufend - bufptr,
 					   " %s: %i", *nptr, *pptr);
+#endif
 
 	set_proc_title(buf);
 }
@@ -527,6 +538,7 @@ main(int argc, char **argv)
 	 */
 	__libc_stack_end = (void*) &argv;
 #endif
+	start_time = ev_time();
 	/* set locale to make iswXXXX function work */
 	if (setlocale(LC_CTYPE, "en_US.UTF-8") == NULL)
 		fprintf(stderr, "Failed to set locale to en_US.UTF-8\n");
@@ -640,7 +652,6 @@ main(int argc, char **argv)
 		if (start_loop) {
 			say_crit("entering the event loop");
 			ev_now_update(loop());
-			start_time = ev_now(loop());
 			signal_start();
 			ev_run(loop(), 0);
 		}

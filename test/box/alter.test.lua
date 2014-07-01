@@ -33,14 +33,14 @@ _space:delete{_index.id}
 --
 -- Can't change properties of a space
 --
-_space:update({_space.id}, {{'+', 0, 1}})
-_space:update({_space.id}, {{'+', 0, 2}})
+_space:update({_space.id}, {{'+', 1, 1}})
+_space:update({_space.id}, {{'+', 1, 2}})
 --
 -- Create a space
 --
 t = _space:auto_increment{ADMIN, 'hello', 'memtx', 0}
 -- Check that a space exists
-space = box.space[t[0]]
+space = box.space[t[1]]
 space.id
 space.field_count
 space.index[0]
@@ -50,10 +50,10 @@ space.index[0]
 space:select{0}
 space:insert{0, 0}
 space:replace{0, 0}
-space:update({0}, {{'+', 0, 1}})
+space:update({0}, {{'+', 1, 1}})
 space:delete{0}
 t = _space:delete{space.id}
-space_deleted = box.space[t[0]]
+space_deleted = box.space[t[1]]
 space_deleted
 space:replace{0}
 _index:insert{_space.id, 0, 'primary', 'tree', 1, 1, 0, 'num'}
@@ -119,3 +119,23 @@ space:create_index('5')
 space:create_index('')
 
 space:drop()
+-- gh-57 Confusing error message when trying to create space with a
+-- duplicate id
+auto = box.schema.create_space('auto_original')
+auto2 = box.schema.create_space('auto', {id = auto.id})
+box.schema.space.drop('auto')
+auto2
+box.schema.create_space('auto_original', {id = auto.id})
+auto:drop()
+
+-- ------------------------------------------------------------------
+-- gh-281 Crash after rename + replace + delete with multi-part index
+-- ------------------------------------------------------------------
+s = box.schema.create_space('space')
+s:create_index('primary', {unique = true, parts = {1, 'NUM', 2, 'STR'}})
+s:insert{1, 'a'}
+box.space.space.index.primary:rename('secondary')
+box.space.space:replace{1,'The rain in Spain'}
+box.space.space:delete{1,'The rain in Spain'}
+box.space.space:select{}
+s:drop()

@@ -39,18 +39,8 @@
 #include <fiber.h>
 #include <scoped_guard.h>
 #include <third_party/base64.h>
-#include "access.h"
 #include "authentication.h"
-
-static inline void
-access_check_space(uint8_t access, struct user *user, struct space *space)
-{
-	if (access && space->def.uid != user->uid && user->uid != ADMIN &&
-	    access & ~space->access[user->auth_token]) {
-		tnt_raise(ClientError, ER_SPACE_ACCESS_DENIED,
-			  priv_name(access), user->name, space->def.name);
-	}
-}
+#include "access.h"
 
 #if 0
 static const char *
@@ -94,17 +84,9 @@ static void
 execute_replace(struct request *request, struct txn *txn, struct port *port)
 {
 	(void) port;
-	struct user *user = user();
-	/*
-	 * If a user has a global permission, clear the respective
-	 * privilege from the list of privileges required
-	 * to execute the request.
-	 */
-	uint8_t access = PRIV_W & ~user->universal_access;
-
 	struct space *space = space_cache_find(request->space_id);
 
-	access_check_space(access, user, space);
+	space_check_access(space, PRIV_W);
 	struct tuple *new_tuple = tuple_new(space->format, request->tuple,
 					    request->tuple_end);
 	TupleGuard guard(new_tuple);
@@ -120,14 +102,12 @@ execute_update(struct request *request, struct txn *txn,
 	       struct port *port)
 {
 	(void) port;
-	struct user *user = user();
-	uint8_t access = PRIV_W & ~user->universal_access;
 
 	/* Parse UPDATE request. */
 	/** Search key  and key part count. */
 
 	struct space *space = space_cache_find(request->space_id);
-	access_check_space(access, user, space);
+	space_check_access(space, PRIV_W);
 	Index *pk = index_find(space, 0);
 	/* Try to find the tuple by primary key. */
 	const char *key = request->key;
@@ -144,7 +124,8 @@ execute_update(struct request *request, struct txn *txn,
 					       region_alloc_cb,
 					       &fiber()->gc,
 					       old_tuple, request->tuple,
-					       request->tuple_end);
+					       request->tuple_end,
+					       request->field_base);
 	TupleGuard guard(new_tuple);
 	space_validate_tuple(space, new_tuple);
 	txn_replace(txn, space, old_tuple, new_tuple, DUP_INSERT);
@@ -154,11 +135,8 @@ static void
 execute_delete(struct request *request, struct txn *txn, struct port *port)
 {
 	(void) port;
-	struct user *user = user();
-	uint8_t access = PRIV_W & ~user->universal_access;
-
 	struct space *space = space_cache_find(request->space_id);
-	access_check_space(access, user, space);
+	space_check_access(space, PRIV_W);
 
 	/* Try to find tuple by primary key */
 	Index *pk = index_find(space, 0);
@@ -178,10 +156,8 @@ static void
 execute_select(struct request *request, struct txn *txn, struct port *port)
 {
 	(void) txn;
-	struct user *user = user();
-	uint8_t access = PRIV_R & ~user->universal_access;
 	struct space *space = space_cache_find(request->space_id);
-	access_check_space(access, user, space);
+	space_check_access(space, PRIV_R);
 	Index *index = index_find(space, request->index_id);
 
 	ERROR_INJECT_EXCEPTION(ERRINJ_TESTING);
@@ -316,37 +292,37 @@ request_encode(struct request *request, struct iovec *iov)
 	const int HEADER_LEN_MAX = 32;
 	uint32_t key_len = request->key_end - request->key;
 	uint32_t len = HEADER_LEN_MAX + key_len;
-	char *data = (char *) region_alloc(&fiber()->gc, len);
-	char *d = (char *) data + 1; /* Skip 1 byte for MP_MAP */
+	char *begin = (char *) region_alloc(&fiber()->gc, len);
+	char *pos = begin + 1;     /* skip 1 byte for MP_MAP */
 	int map_size = 0;
 	if (true) {
-		d = mp_encode_uint(d, IPROTO_SPACE_ID);
-		d = mp_encode_uint(d, request->space_id);
+		pos = mp_encode_uint(pos, IPROTO_SPACE_ID);
+		pos = mp_encode_uint(pos, request->space_id);
 		map_size++;
 	}
 	if (request->index_id) {
-		d = mp_encode_uint(d, IPROTO_INDEX_ID);
-		d = mp_encode_uint(d, request->index_id);
+		pos = mp_encode_uint(pos, IPROTO_INDEX_ID);
+		pos = mp_encode_uint(pos, request->index_id);
 		map_size++;
 	}
 	if (request->key) {
-		d = mp_encode_uint(d, IPROTO_KEY);
-		memcpy(d, request->key, key_len);
-		d += key_len;
+		pos = mp_encode_uint(pos, IPROTO_KEY);
+		memcpy(pos, request->key, key_len);
+		pos += key_len;
 		map_size++;
 	}
 	if (request->tuple) {
-		d = mp_encode_uint(d, IPROTO_TUPLE);
+		pos = mp_encode_uint(pos, IPROTO_TUPLE);
 		iov[1].iov_base = (void *) request->tuple;
 		iov[1].iov_len = (request->tuple_end - request->tuple);
-		iovcnt = 2;
+		iovcnt++;
 		map_size++;
 	}
 
-	assert(d <= data + len);
-	mp_encode_map(data, map_size);
-	iov[0].iov_base = data;
-	iov[0].iov_len = (d - data);
+	assert(pos <= begin + len);
+	mp_encode_map(begin, map_size);
+	iov[0].iov_base = begin;
+	iov[0].iov_len = pos - begin;
 
 	return iovcnt;
 }

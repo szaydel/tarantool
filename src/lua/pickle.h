@@ -1,3 +1,5 @@
+#ifndef TARANTOOL_LUA_PICKLE_H_INCLUDED
+#define TARANTOOL_LUA_PICKLE_H_INCLUDED
 /*
  * Redistribution and use in source and binary forms, with or
  * without modification, are permitted provided that the following
@@ -27,26 +29,7 @@
  * SUCH DAMAGE.
  */
 
-#include "vclock.h"
-#include "exception.h"
-
 void
-vclock_realloc(struct vclock *vclock, uint32_t node_id)
-{
-	uint32_t newcapacity = vclock->capacity ? vclock->capacity : 8;
-	while (newcapacity <= node_id)
-		newcapacity *= 2;
+tarantool_lua_pickle_init(struct lua_State *L);
 
-	int64_t *newlsn = (int64_t *) realloc(vclock->lsn,
-		newcapacity * sizeof(*vclock->lsn));
-	if (newlsn == NULL)
-		tnt_raise(LoggedError, ER_MEMORY_ISSUE,
-			  newcapacity * sizeof(*vclock->lsn),
-			  "vclock", "reallock");
-	for (int64_t n = vclock->capacity; n < newcapacity; n++) {
-		newlsn[n] = -1; /* unknown node */
-	}
-
-	vclock->lsn = newlsn;
-	vclock->capacity = newcapacity;
-}
+#endif /* TARANTOOL_LUA_PICKLE_H_INCLUDED */

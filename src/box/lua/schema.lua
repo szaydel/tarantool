@@ -17,6 +17,10 @@ ffi.cdef[[
         void (*free)(struct iterator *);
         void (*close)(struct iterator *);
     };
+    size_t
+    boxffi_index_len(uint32_t space_id, uint32_t index_id);
+    struct tuple *
+    boxffi_index_random(uint32_t space_id, uint32_t index_id, uint32_t rnd);
     struct iterator *
     boxffi_index_iterator(uint32_t space_id, uint32_t index_id, int type,
                   const char *key);
@@ -54,7 +58,7 @@ local function user_resolve(user)
     if tuple == nil then
         return nil
     end
-    return tuple[0]
+    return tuple[1]
 end
 
 box.schema.space = {}
@@ -73,7 +77,7 @@ box.schema.space.create = function(name, options)
         if options.if_not_exists then
             return box.space[name], "not created"
         else
-            box.raise(box.error.ER_SPACE_EXISTS,
+            box.raise(box.error.SPACE_EXISTS,
                      "Space '"..name.."' already exists")
         end
     end
@@ -81,7 +85,7 @@ box.schema.space.create = function(name, options)
     if options.id then
         id = options.id
     else
-        id = _space.index[0]:max()[0]
+        id = _space.index[0]:max()[1]
         if id < box.schema.SYSTEM_ID_MAX then
             id = box.schema.SYSTEM_ID_MAX + 1
         else
@@ -105,19 +109,26 @@ box.schema.create_space = box.schema.space.create
 box.schema.space.drop = function(space_id)
     local _space = box.space[box.schema.SPACE_ID]
     local _index = box.space[box.schema.INDEX_ID]
+    local _priv = box.space[box.schema.PRIV_ID]
     local keys = _index:select(space_id)
     for i = #keys, 1, -1 do
         local v = keys[i]
-        _index:delete{v[0], v[1]}
+        _index:delete{v[1], v[2]}
+    end
+    local privs = _priv:select{}
+    for k, tuple in pairs(privs) do
+        if tuple[3] == 'space' and tuple[4] == space_id then
+            box.schema.user.revoke(tuple[2], tuple[5], tuple[3], tuple[4])
+        end
     end
     if _space:delete{space_id} == nil then
-        box.raise(box.error.ER_NO_SUCH_SPACE,
+        box.raise(box.error.NO_SUCH_SPACE,
                   "Space "..space_id.." does not exist")
     end
 end
 box.schema.space.rename = function(space_id, space_name)
     local _space = box.space[box.schema.SPACE_ID]
-    _space:update(space_id, {{"=", 2, space_name}})
+    _space:update(space_id, {{"=", 3, space_name}})
 end
 
 box.schema.index = {}
@@ -132,6 +143,13 @@ box.schema.index.create = function(space_id, name, options)
     end
     if options.parts == nil then
         options.parts = { 0, "num" }
+    else
+        for i=1,#options.parts,2 do
+            -- Lua uses one-based field numbers but _space is zero-based
+            if type(options.parts[i]) == "number" then
+                options.parts[i] = options.parts[i] - 1
+            end
+        end
     end
     if options.unique == nil then
         options.unique = true
@@ -145,9 +163,9 @@ box.schema.index.create = function(space_id, name, options)
     local tuple = _index.index[0]
         :select(space_id, { limit = 1, iterator = 'LE' })[1]
     if tuple then
-        local id = tuple[0]
+        local id = tuple[1]
         if id == space_id then
-            iid = tuple[1] + 1
+            iid = tuple[2] + 1
         end
     end
     if options.id then
@@ -161,15 +179,15 @@ box.schema.index.drop = function(space_id, index_id)
 end
 box.schema.index.rename = function(space_id, index_id, name)
     local _index = box.space[box.schema.INDEX_ID]
-    _index:update({space_id, index_id}, {{"=", 2, name}})
+    _index:update({space_id, index_id}, {{"=", 3, name}})
 end
 box.schema.index.alter = function(space_id, index_id, options)
     if box.space[space_id] == nil then
-        box.raise(box.error.ER_NO_SUCH_SPACE,
+        box.raise(box.error.NO_SUCH_SPACE,
                   "Space "..space_id.." does not exist")
     end
     if box.space[space_id].index[index_id] == nil then
-        box.raise(box.error.ER_NO_SUCH_INDEX,
+        box.raise(box.error.NO_SUCH_INDEX,
                   "Index "..index_id.." not found in space"..space_id)
     end
     if options == nil then
@@ -187,7 +205,7 @@ box.schema.index.alter = function(space_id, index_id, options)
     end
     if options.id ~= nil then
         if options.parts ~= nil then
-            box.raise(box.error.ER_PROC_LUA,
+            box.raise(box.error.PROC_LUA,
                       "Don't know how to update both id and parts")
         end
         ops = {}
@@ -196,25 +214,32 @@ box.schema.index.alter = function(space_id, index_id, options)
                 table.insert(ops, {'=', field_no, value})
             end
         end
-        add_op(options.id, 1)
-        add_op(options.name, 2)
-        add_op(options.type, 3)
-        add_op(options.unique, 4)
+        add_op(options.id, 2)
+        add_op(options.name, 3)
+        add_op(options.type, 4)
+        add_op(options.unique, 5)
         _index:update({space_id, index_id}, ops)
         return
     end
     local tuple = _index:get{space_id, index_id}
     if options.name == nil then
-        options.name = tuple[2]
+        options.name = tuple[3]
     end
     if options.type == nil then
-        options.type = tuple[3]
+        options.type = tuple[4]
     end
     if options.unique == nil then
-        options.unique = tuple[4]
+        options.unique = tuple[5]
     end
     if options.parts == nil then
         options.parts = {tuple:slice(6)} -- not part count
+    else
+        for i=1,#options.parts,2 do
+            -- Lua uses one-based field numbers but _space is zero-based
+            if type(options.parts[i]) == "number" then
+                options.parts[i] = options.parts[i] - 1
+            end
+        end
     end
     _index:replace{space_id, index_id, options.name, options.type,
                    options.unique, #options.parts/2, unpack(options.parts)}
@@ -284,14 +309,21 @@ local port_t = ffi.typeof('struct port *')
 function box.schema.space.bless(space)
     local index_mt = {}
     -- __len and __index
-    index_mt.len = function(index) return #index.idx end
+    index_mt.len = function(index)
+        local ret = builtin.boxffi_index_len(index.space.id, index.id)
+        if ret == -1 then
+            box.raise()
+        end
+        return tonumber(ret)
+    end
+    index_mt.__len = index_mt.len -- Lua 5.2 compatibility
     index_mt.__newindex = function(table, index)
         return error('Attempt to modify a read-only table') end
     index_mt.__index = index_mt
     -- min and max
     index_mt.min = function(index, key)
         if index.type == 'HASH' then
-            box.raise(box.error.ER_UNSUPPORTED, 'HASH does not support min()')
+            box.raise(box.error.UNSUPPORTED, 'HASH does not support min()')
         end
         local lst = index:select(key, { iterator = 'GE', limit = 1 })[1]
         if lst ~= nil then
@@ -302,7 +334,7 @@ function box.schema.space.bless(space)
     end
     index_mt.max = function(index, key)
         if index.type == 'HASH' then
-            box.raise(box.error.ER_UNSUPPORTED, 'HASH does not support max()')
+            box.raise(box.error.UNSUPPORTED, 'HASH does not support max()')
         end
         local lst = index:select(key, { iterator = 'LE', limit = 1 })[1]
         if lst ~= nil then
@@ -311,7 +343,17 @@ function box.schema.space.bless(space)
             return
         end
     end
-    index_mt.random = function(index, rnd) return index.idx:random(rnd) end
+    index_mt.random = function(index, rnd)
+        rnd = rnd or math.random()
+        local tuple = builtin.boxffi_index_random(index.space.id, index.id, rnd)
+        if tuple == ffi.cast('void *', -1) then
+            box.raise() -- error
+        elseif tuple ~= nil then
+            return box.tuple.bless(tuple)
+        else
+            return nil
+        end
+    end
     -- iteration
     index_mt.pairs = function(index, key, opts)
         local pkey, pkey_end = msgpackffi.encode_tuple(key)
@@ -323,7 +365,9 @@ function box.schema.space.bless(space)
             elseif box.index[opts.iterator] then
                 itype = box.index[opts.iterator]
             elseif opts.iterator ~= nil then
-                error("Wrong iterator type: "..tostring(opts.iterator))
+                box.raise(box.error.ITERATOR_TYPE,
+                         "Unknown iterator type '"..
+                         tostring(opts.iterator).."'")
             end
         end
 
@@ -350,7 +394,7 @@ function box.schema.space.bless(space)
         end
 
         if key == nil or type(key) == "table" and #key == 0 then
-            return #index.idx
+            return index:len()
         end
 
         local state, tuple
@@ -362,7 +406,7 @@ function box.schema.space.bless(space)
 
     local function check_index(space, index_id)
         if space.index[index_id] == nil then
-            box.raise(box.error.ER_NO_SUCH_INDEX,
+            box.raise(box.error.NO_SUCH_INDEX,
                 string.format("No index #%d is defined in space %d", index_id,
                     space.id))
         end
@@ -380,7 +424,7 @@ function box.schema.space.bless(space)
         elseif port.size == 1 then
             return box.tuple.bless(port.ret[0])
         else
-            box.raise(box.error.ER_MORE_THAN_ONE_TUPLE,
+            box.raise(box.error.MORE_THAN_ONE_TUPLE,
                 "More than one tuple found by get()")
         end
     end
@@ -436,7 +480,7 @@ function box.schema.space.bless(space)
     end
     index_mt.alter= function(index, options)
         if index.id == nil or index.space == nil then
-            box.raise(box.error.ER_PROC_LUA, "Usage: index:alter{opts}")
+            box.raise(box.error.PROC_LUA, "Usage: index:alter{opts}")
         end
         return box.schema.index.alter(index.space.id, index.id, options)
     end
@@ -489,11 +533,51 @@ function box.schema.space.bless(space)
         local max_tuple = space.index[0]:max()
         local max = 0
         if max_tuple ~= nil then
-            max = max_tuple[0]
+            max = max_tuple[1]
         end
         table.insert(tuple, 1, max + 1)
         return space:insert(tuple)
     end
+
+    --
+    -- Increment counter identified by primary key.
+    -- Create counter if not exists.
+    -- Returns updated value of the counter.
+    --
+    space_mt.inc = function(space, key)
+        local key = keify(key)
+        local cnt_index = #key + 1
+        local tuple
+        while true do
+            tuple = space:update(key, {{'+', cnt_index, 1}})
+            if tuple ~= nil then break end
+            local data = key
+            table.insert(data, 1)
+            tuple = space:insert(data)
+            if tuple ~= nil then break end
+        end
+        return tuple[cnt_index]
+    end
+
+    --
+    -- Decrement counter identified by primary key.
+    -- Delete counter if it decreased to zero.
+    -- Returns updated value of the counter.
+    --
+    space_mt.dec = function(space, key)
+        local key = keify(key)
+        local cnt_index = #key + 1
+        local tuple = space:get(key)
+        if tuple == nil then return 0 end
+        if tuple[cnt_index] == 1 then
+            space:delete(key)
+            return 0
+        else
+            tuple = space:update(key, {{'-', cnt_index, 1}})
+            return tuple[cnt_index]
+        end
+    end
+
     space_mt.pairs = function(space, key)
         if space.index[0] == nil then
             -- empty space without indexes, return empty iterator
@@ -510,12 +594,11 @@ function box.schema.space.bless(space)
         end
         check_index(space, 0)
         local pk = space.index[0]
-        while #pk.idx > 0 do
+        while pk:len() > 0 do
             local state, t
             for state, t in pk:pairs() do
                 local key = {}
-                -- ipairs does not work because pk.parts is zero-indexed
-                for _k2, parts in pairs(pk.parts) do
+                for _k2, parts in ipairs(pk.parts) do
                     table.insert(key, t[parts.fieldno])
                 end
                 space:delete(key)
@@ -534,7 +617,7 @@ function box.schema.space.bless(space)
     space_mt.run_triggers = function(space, yesno)
         local space = ffi.C.space_by_id(space.id)
         if space == nil then
-            box.raise(box.error.ER_NO_SUCH_SPACE, "Space not found")
+            box.raise(box.error.NO_SUCH_SPACE, "Space not found")
         end
         ffi.C.space_run_triggers(space, yesno)
     end
@@ -544,7 +627,6 @@ function box.schema.space.bless(space)
     if type(space.index) == 'table' and space.enabled then
         for j, index in pairs(space.index) do
             if type(j) == 'number' then
-                rawset(index, 'idx', box.index.bind(space.id, j))
                 setmetatable(index, index_mt)
             end
         end
@@ -577,7 +659,7 @@ local function object_resolve(object_type, object_name)
     if object_type == 'space' then
         local space = box.space[object_name]
         if  space == nil then
-            box.raise(box.error.ER_NO_SUCH_SPACE,
+            box.raise(box.error.NO_SUCH_SPACE,
                       "Space '"..object_name.."' does not exist")
         end
         return space.id
@@ -591,13 +673,29 @@ local function object_resolve(object_type, object_name)
             func = _func.index['primary']:get{object_name}
         end
         if func then
-            return func[0]
+            return func[1]
         else
-            box.raise(box.error.ER_NO_SUCH_FUNCTION,
+            box.raise(box.error.NO_SUCH_FUNCTION,
                       "Function '"..object_name.."' does not exist")
         end
     end
-    box.raise(box.error.ER_UNKNOWN_SCHEMA_OBJECT,
+    if object_type == 'role' then
+        local _user = box.space[box.schema.USER_ID]
+        local role
+        if type(object_name) == 'string' then
+            role = _user.index['name']:get{object_name}
+        else
+            role = _user.index['primary']:get{object_name}
+        end
+        if role then
+            return role[1]
+        else
+            box.raise(box.error.NO_SUCH_USER,
+                      "Role '"..object_name.."' does not exist")
+        end
+    end
+
+    box.raise(box.error.UNKNOWN_SCHEMA_OBJECT,
               "Unknown object type '"..object_type.."'")
 end
 
@@ -606,7 +704,7 @@ box.schema.func.create = function(name)
     local _func = box.space[box.schema.FUNC_ID]
     local func = _func.index['name']:get{name}
     if func then
-            box.raise(box.error.ER_FUNCTION_EXISTS,
+            box.raise(box.error.FUNCTION_EXISTS,
                       "Function '"..name.."' already exists")
     end
     _func:auto_increment{session.uid(), name}
@@ -614,7 +712,14 @@ end
 
 box.schema.func.drop = function(name)
     local _func = box.space[box.schema.FUNC_ID]
+    local _priv = box.space[box.schema.PRIV_ID]
     local fid = object_resolve('function', name)
+    local privs = _priv:select{}
+    for k, tuple in pairs(privs) do
+        if tuple[2] == 'function' and tuple[3] == function_id then
+            box.schema.user.revoke(tuple[1], tuple[4], tuple[2], tuple[3])
+        end
+    end
     _func:delete{fid}
 end
 
@@ -632,13 +737,15 @@ box.schema.user.passwd = function(new_password)
     local _user = box.space[box.schema.USER_ID]
     auth_mech_list = {}
     auth_mech_list["chap-sha1"] = box.schema.user.password(new_password)
-    _user:update({uid}, {"=", 3, auth_mech_list})
+    require('session').su('admin')
+    _user:update({uid}, {{"=", 5, auth_mech_list}})
+    require('session').su(uid)
 end
 
 box.schema.user.create = function(name, opts)
     local uid = user_resolve(name)
     if uid then
-        box.raise(box.error.ER_USER_EXISTS,
+        box.raise(box.error.USER_EXISTS,
                   "User '"..name.."' already exists")
     end
     if opts == nil then
@@ -649,28 +756,28 @@ box.schema.user.create = function(name, opts)
         auth_mech_list["chap-sha1"] = box.schema.user.password(opts.password)
     end
     local _user = box.space[box.schema.USER_ID]
-    _user:auto_increment{'', name, auth_mech_list}
+    _user:auto_increment{session.uid(), name, 'user', auth_mech_list}
 end
 
 box.schema.user.drop = function(name)
     local uid = user_resolve(name)
     if uid == nil then
-        box.raise(box.error.ER_NO_SUCH_USER,
+        box.raise(box.error.NO_SUCH_USER,
                  "User '"..name.."' does not exist")
     end
     -- recursive delete of user data
     local _priv = box.space[box.schema.PRIV_ID]
     local privs = _priv.index['owner']:select{uid}
     for k, tuple in pairs(privs) do
-        box.schema.user.revoke(uid, tuple[4], tuple[2], tuple[3])
+        box.schema.user.revoke(uid, tuple[5], tuple[3], tuple[4])
     end
     local spaces = box.space[box.schema.SPACE_ID].index['owner']:select{uid}
     for k, tuple in pairs(spaces) do
-        box.space[tuple[0]]:drop()
+        box.space[tuple[1]]:drop()
     end
     local funcs = box.space[box.schema.FUNC_ID].index['owner']:select{uid}
-    for k, tuple in pairs(spaces) do
-        box.schema.func.drop(tuple[0])
+    for k, tuple in pairs(funcs) do
+        box.schema.func.drop(tuple[1])
     end
     box.space[box.schema.USER_ID]:delete{uid}
 end
@@ -679,7 +786,7 @@ box.schema.user.grant = function(user_name, privilege, object_type,
                                  object_name, grantor)
     local uid = user_resolve(user_name)
     if uid == nil then
-        box.raise(box.error.ER_NO_SUCH_USER,
+        box.raise(box.error.NO_SUCH_USER,
                   "User '"..user_name.."' does not exist")
     end
     privilege = privilege_resolve(privilege)
@@ -696,7 +803,7 @@ end
 box.schema.user.revoke = function(user_name, privilege, object_type, object_name)
     local uid = user_resolve(user_name)
     if uid == nil then
-        box.raise(box.error.ER_NO_SUCH_USER,
+        box.raise(box.error.NO_SUCH_USER,
                   "User '"..name.."' does not exist")
     end
     privilege = privilege_resolve(privilege)
@@ -706,12 +813,28 @@ box.schema.user.revoke = function(user_name, privilege, object_type, object_name
     if tuple == nil then
         return
     end
-    local old_privilege = tuple[4]
+    local old_privilege = tuple[5]
     if old_privilege ~= privilege then
         privilege = bit.band(old_privilege, bit.bnot(privilege))
-        _priv:update({uid, object_type, oid}, { "=", 4, privilege})
+        _priv:update({uid, object_type, oid}, { "=", 5, privilege})
     else
         _priv:delete{uid, object_type, oid}
     end
+end
+
+box.schema.role = {}
+
+box.schema.role.create = function(name)
+    local uid = user_resolve(name)
+    if uid then
+        box.raise(box.error.USER_EXISTS,
+                  "Role '"..name.."' already exists")
+    end
+    local _user = box.space[box.schema.USER_ID]
+    _user:auto_increment{session.uid(), name, 'role'}
+end
+
+box.schema.role.drop = function(name)
+    return box.schema.user.drop(name)
 end
 

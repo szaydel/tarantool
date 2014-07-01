@@ -3,7 +3,7 @@
 --
 space = box.schema.create_space('tweedledum')
 -- Multipart primary key (sender nickname, receiver nickname, message id)
-space:create_index('primary', { type = 'tree', parts = {0, 'str', 1, 'str', 2, 'num'}, unique = true })
+space:create_index('primary', { type = 'tree', parts = {1, 'str', 2, 'str', 3, 'num'}, unique = true })
 
 space:insert{'Vincent', 'Jules', 0, 'Do you know what they call a - a - a Quarter Pounder with cheese in Paris?'}
 space:insert{'Jules', 'Vincent', 0, 'They don`t call it a Quarter Pounder with cheese?'}
@@ -78,8 +78,8 @@ space:delete{'The Wolf!', 'Vincent', 0}
 space:delete{'The Wolf!', 'Vincent', 3}
 space:delete{'Vincent', 'The Wolf!', 0}
 
-space:update({'Vincent', 'The Wolf!', 1}, {{ '=', 0, 'Updated' }, {'=', 4, 'New'}})
-space:update({'Updated', 'The Wolf!', 1}, {{ '=', 0, 'Vincent'}, { '#', 4, 1 }})
+space:update({'Vincent', 'The Wolf!', 1}, {{ '=', 1, 'Updated' }, {'=', 5, 'New'}})
+space:update({'Updated', 'The Wolf!', 1}, {{ '=', 1, 'Vincent'}, { '#', 5, 1 }})
 -- Checking Vincent's last messages
 space.index['primary']:select({'Vincent', 'The Wolf!'})
 -- Checking The Wolf's last messages
@@ -95,8 +95,8 @@ space:delete{'The Wolf!', 'Vincent', 1, 'Come again?'}
 --
 -- Update test
 --
-space:update({'The Wolf!', 'Vincent', 1}, {{'=', 3, '<ooops>'}})
-space:update({'Vincent', 'The Wolf!', 1}, {{'=', 3, '<ooops>'}})
+space:update({'The Wolf!', 'Vincent', 1}, {{'=', 4, '<ooops>'}})
+space:update({'Vincent', 'The Wolf!', 1}, {{'=', 4, '<ooops>'}})
 
 -- Checking Vincent's last messages
 space.index['primary']:select({'Vincent', 'The Wolf!'})
@@ -104,11 +104,11 @@ space.index['primary']:select({'Vincent', 'The Wolf!'})
 space.index['primary']:select({'The Wolf!', 'Vincent'})
 
 -- try to update a nonexistent message
-space:update({'Vincent', 'The Wolf!', 3}, {{'=', 3, '<ooops>'}})
+space:update({'Vincent', 'The Wolf!', 4}, {{'=', 4, '<ooops>'}})
 -- try to update patrial defined key
-space:update({'Vincent', 'The Wolf!'}, {{'=', 3, '<ooops>'}})
+space:update({'Vincent', 'The Wolf!'}, {{'=', 4, '<ooops>'}})
 -- try to update by invalid key
-space:update({'The Wolf!', 'Vincent', 1, 'Come again?'}, {{'=', 3, '<ooops>'}})
+space:update({'The Wolf!', 'Vincent', 1, 'Come again?'}, {{'=', 4, '<ooops>'}})
 space:len()
 space:truncate()
 space:len()
@@ -117,8 +117,8 @@ space:len()
 --if an index is modified between calls
 --
 space.index['primary']:drop()
-space:create_index('primary', { type = 'tree', parts = {0, 'str'}, unique = true })
-space:create_index('second', { type  = 'tree', parts = {1, 'str', 2, 'str'}, unique = true })
+space:create_index('primary', { type = 'tree', parts = {1, 'str'}, unique = true })
+space:create_index('second', { type  = 'tree', parts = {2, 'str', 3, 'str'}, unique = true })
 
 space:insert{'a', 'a', 'a'}
 space:insert{'d', 'd', 'd'}
@@ -161,7 +161,7 @@ space = nil
 
 space = box.schema.create_space('tweedledum')
 -- Multipart primary key (sender nickname, receiver nickname, message id)
-space:create_index('primary', { type = 'tree', parts = {0, 'num', 2, 'num'}, unique = true })
+space:create_index('primary', { type = 'tree', parts = {1, 'num', 3, 'num'}, unique = true })
 
 space:insert{1, 1}
 space:replace{1, 1}

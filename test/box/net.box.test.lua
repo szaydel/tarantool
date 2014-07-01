@@ -66,7 +66,7 @@ slf, foo = require('box.internal').call_loadproc('box.net.self:select')
 type(slf)
 type(foo)
 
-space:update(123, {{'=', 1, 'test1-updated'}})
+space:update(123, {{'=', 2, 'test1-updated'}})
 remote:update(space.id, 123, {{'=', 2, 'test2-updated'}})
 
 space:insert{123, 'test1', 'test2'}
@@ -124,7 +124,7 @@ for i = 1, 20 do
                 fiber.detach()
                 local s = string.format('%07d', i)
                 local so = remote:call('parallel_foo', s)
-                table.insert(parallel, s == so[1][0])
+                table.insert(parallel, s == so[1][1])
             end
         )
     )

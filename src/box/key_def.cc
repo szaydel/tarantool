@@ -45,10 +45,16 @@ const uint32_t key_mp_type[] = {
 enum schema_object_type
 schema_object_type(const char *name)
 {
+	/**
+	 * There may be other places in which we look object type by
+	 * name, and they are case-sensitive, so be case-sensitive
+	 * here too.
+	 */
 	static const char *strs[] = {
-		"unknown", "universe", "space", "function" };
-	int index = strindex(strs, name, 4);
-	return (enum schema_object_type) (index == 4 ? 0 : index);
+		"unknown", "universe", "space", "function", "user", "role" };
+	int n_strs = sizeof(strs)/sizeof(*strs);
+	int index = strindex(strs, name, n_strs);
+	return (enum schema_object_type) (index == n_strs ? 0 : index);
 }
 
 struct key_def *
