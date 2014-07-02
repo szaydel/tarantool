@@ -21,7 +21,7 @@ end;
 space:select{100}
  
 space:begin()
- space:update({100}, {{'+', 1, 100}})
+space:update({100}, {{'+', 1, 100}})
 space:rollback()
 
 space:drop()

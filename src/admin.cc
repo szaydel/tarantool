@@ -114,13 +114,11 @@ admin_handler(va_list ap)
 
 	trigger_run(&session_on_connect, NULL);
 
-        struct tbuf *out = tbuf_new(&iobuf->pool);
 	for (;;) {
 		if (admin_dispatch(&coio, iobuf, L) < 0)
 			return;
 		iobuf_reset(iobuf);
 		fiber_gc();
-                tbuf_reset(out);
 	}
 }
 
