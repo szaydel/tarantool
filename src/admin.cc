@@ -61,8 +61,9 @@ admin_dispatch(struct ev_io *coio, struct iobuf *iobuf, lua_State *L)
 				 fiber()->session->delim);
 
 	char *eol;
-	while ((eol = (char *) memmem(in->pos, in->end - in->pos, delim,
-				      delim_len)) == NULL) {
+	while (in->pos == NULL
+	       || (eol = (char *) memmem(in->pos, in->end - in->pos, delim,
+					 delim_len)) == NULL) {
 		if (coio_bread(coio, in, 1) <= 0)
 			return -1;
 	}
@@ -97,6 +98,7 @@ admin_handler(va_list ap)
 	struct ev_io coio = va_arg(ap, struct ev_io);
 	struct sockaddr *addr = va_arg(ap, struct sockaddr *);
 	struct iobuf *iobuf = va_arg(ap, struct iobuf *);
+
 	lua_State *L = lua_newthread(tarantool_L);
 	LuarefGuard coro_guard(tarantool_L);
 	/*
