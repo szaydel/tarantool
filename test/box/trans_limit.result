@@ -25,7 +25,7 @@ end;
 ...
 do_transaction();
 ---
-- error: 'Number of requests in multistatement tranasction exceeds limit: 10'
+- error: 'Number of requests in multi-statement transaction exceeds limit: 10'
 ...
 space:len();
 ---

@@ -74,8 +74,8 @@ enum { TNT_ERRMSG_MAX = 512 };
 	/* 22 */_(ER_TUPLE_NOT_ARRAY,		2, "Tuple/Key must be MsgPack array") \
 	/* 23 */_(ER_FIELD_TYPE,		2, "Tuple field %u type does not match one required by operation: expected %s") \
 	/* 24 */_(ER_FIELD_TYPE_MISMATCH,	2, "Ambiguous field type in index %u, key part %u. Requested type is %s but the field has previously been defined as %s") \
-	/* 25 */_(ER_SPLICE,			2, "Field SPLICE error: %s") \
-	/* 26 */_(ER_ARG_TYPE,			2, "Argument type in operation on field %u does not match field type: expected a %s") \
+	/* 25 */_(ER_SPLICE,			2, "SPLICE error on field %u: %s") \
+	/* 26 */_(ER_ARG_TYPE,			2, "Argument type in operation '%c' on field %u does not match field type: expected a %s") \
 	/* 27 */_(ER_TUPLE_IS_TOO_LONG,		2, "Tuple is too long %u") \
 	/* 28 */_(ER_UNKNOWN_UPDATE_OP,		2, "Unknown UPDATE operation") \
 	/* 29 */_(ER_UPDATE_FIELD,		2, "Field %u UPDATE error: %s") \
@@ -126,9 +126,11 @@ enum { TNT_ERRMSG_MAX = 512 };
 	/* 74 */_(ER_INVALID_XLOG,		2, "Failed to read xlog: %lld") \
 	/* 75 */_(ER_INVALID_XLOG_NAME,		2, "Invalid xlog name: expected %lld got %lld") \
 	/* 76 */_(ER_INVALID_XLOG_ORDER,	2, "Invalid xlog order: %lld and %lld") \
-	/* 77 */_(ER_TRANSACTION_TOO_LONG,	2, "Number of requests in multistatement tranasction exceeds limit: %u") \
-	/* 78 */_(ER_NO_ACTIVE_TRANSACTION,	2, "No active transaction") \
-	/* 79 */_(ER_YIELD_NOT_ALLOWED,	2, "Yield not allows in multistatement transaction") \
+	/* 77 */_(ER_NO_CONNECTION,		2, "Connection is not established") \
+	/* 78 */_(ER_TIMEOUT,			2, "Timeout exceeded") \
+	/* 79 */_(ER_TRANSACTION_TOO_LONG,	2, "Number of requests in multi-statement transaction exceeds limit: %u") \
+	/* 80 */_(ER_NO_ACTIVE_TRANSACTION,	2, "No active transaction") \
+	/* 81 */_(ER_YIELD_NOT_ALLOWED,		2, "Yield not allows in multi-statement transaction") \
 
 /*
  * !IMPORTANT! Please follow instructions at start of the file

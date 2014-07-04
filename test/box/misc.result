@@ -20,7 +20,6 @@ t
   - error
   - index
   - info
-  - net
   - raise
   - schema
   - slab
@@ -198,14 +197,16 @@ t;
   - 'box.error.CREATE_USER : 43'
   - 'box.error.CREATE_SPACE : 9'
   - 'box.error.UNKNOWN_SCHEMA_OBJECT : 49'
-  - 'box.error.YIELD_NOT_ALLOWED : 79'
+  - 'box.error.YIELD_NOT_ALLOWED : 81'
+  - 'box.error.NO_ACTIVE_TRANSACTION : 80'
+  - 'box.error.DROP_PRIMARY_KEY : 17'
   - 'box.error.FIELD_TYPE_MISMATCH : 24'
   - 'box.error.UNSUPPORTED : 5'
   - 'box.error.INVALID_MSGPACK : 20'
   - 'box.error.KEY_PART_COUNT : 31'
   - 'box.error.ALTER_SPACE : 12'
-  - 'box.error.NO_ACTIVE_TRANSACTION : 78'
-  - 'box.error.DROP_PRIMARY_KEY : 17'
+  - 'box.error.SPLICE : 25'
+  - 'box.error.NO_CONNECTION : 77'
   - 'box.error.TUPLE_FOUND : 3'
   - 'box.error.INVALID_XLOG_NAME : 75'
   - 'box.error.INVALID_XLOG : 74'
@@ -232,7 +233,7 @@ t;
   - 'box.error.TUPLE_FORMAT_LIMIT : 16'
   - 'box.error.INVALID_UUID : 64'
   - 'box.error.DROP_SPACE : 11'
-  - 'box.error.SPLICE : 25'
+  - 'box.error.TIMEOUT : 78'
   - 'box.error.MORE_THAN_ONE_TUPLE : 41'
   - 'box.error.MEMORY_ISSUE : 2'
   - 'box.error.NO_SUCH_TRIGGER : 34'
@@ -241,7 +242,7 @@ t;
   - 'box.error.NO_SUCH_SPACE : 36'
   - 'box.error.INDEX_FIELD_COUNT : 39'
   - 'box.error.OK : 0'
-  - 'box.error.TRANSACTION_TOO_LONG : 77'
+  - 'box.error.TRANSACTION_TOO_LONG : 79'
   - 'box.error.UNKNOWN_REQUEST_TYPE : 48'
   - 'box.error.INVALID_XLOG_ORDER : 76'
   - 'box.error.FUNCTION_MAX : 54'
