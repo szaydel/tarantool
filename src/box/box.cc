@@ -171,7 +171,7 @@ static void
 process_ro(struct port *port, struct request *request)
 {
 	if (!iproto_request_is_select(request->type))
-		tnt_raise(LoggedError, ER_SECONDARY);
+		tnt_raise(LoggedError, ER_READ_ONLY);
 	return process_rw(port, request);
 }
 

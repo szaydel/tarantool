@@ -1,24 +1,26 @@
+box.schema.user.grant('guest', 'read,write,execute', 'universe')
 --# create server hot_standby with script='replication/hot_standby.lua', rpl_master=default
 --# create server replica with rpl_master=default, script='replication/replica.lua'
 --# start server hot_standby
 --# start server replica
 --# set connection default
-box.schema.user.grant('guest', 'read,write,execute', 'universe')
 
---# setopt delimiter ';'
 --# set connection default, hot_standby, replica
-while box.space['_priv']:len() < 1 do require('fiber').sleep(0.01) end;
+net = { box = require('net.box') }
+fiber = require('fiber')
+while box.space._priv:len() < 1 do fiber.sleep(0.01) end
+--# setopt delimiter ';'
 do
-    local pri_id = ''
+    local server_id = 0
     local begin_lsn = 0
 
     function _set_pri_lsn(_id, _lsn)
-        pri_id = _id
+        server_id = _id
         begin_lsn = _lsn
     end
 
     function _get_pri_lsn()
-        return box.info.vclock[pri_id]
+        return box.info.vclock[server_id]
     end
 
     function _print_lsn()
@@ -45,7 +47,7 @@ do
 
     function _wait_lsn(_lsnd)
         while _get_pri_lsn() < _lsnd + begin_lsn do
-            require('fiber').sleep(0.001)
+            fiber.sleep(0.001)
         end
         begin_lsn = begin_lsn + _lsnd
     end
@@ -55,7 +57,7 @@ end;
 
 -- set begin lsn on master, replica and hot_standby.
 --# set variable replica_port to 'replica.primary_port'
-a = box.net.box.new('127.0.0.1', replica_port)
+a = net.box:new('127.0.0.1', replica_port)
 a:call('_set_pri_lsn', box.info.node.id, box.info.node.lsn)
 a:close()
 
@@ -70,12 +72,14 @@ _wait_lsn(10)
 _select(1, 10)
 
 --# stop server default
-require('fiber').sleep(0.2)
+--# set connection hot_standby
+while box.info.status ~= 'primary' do fiber.sleep(0.01) end
+--# set connection replica
 
 -- hot_standby.primary_port is garbage, since hot_standby.lua
 -- uses MASTER_PORT environment variable for its primary_port
 --# set variable hot_standby_port to 'hot_standby.master_port'
-a = box.net.box.new('127.0.0.1', hot_standby_port)
+a = net.box:new('127.0.0.1', hot_standby_port)
 a:call('_set_pri_lsn', box.info.node.id, box.info.node.lsn)
 a:close()
 

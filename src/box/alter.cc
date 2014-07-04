@@ -727,11 +727,8 @@ on_rollback_in_old_space(struct trigger *trigger, void *event)
 	struct txn *txn = (struct txn *) event;
 	Index *new_index = (Index *) trigger->data;
 	/* Remove the failed tuple from the new index. */
-        for (txn_request* tr = &txn->req; tr != NULL; tr = tr->next) {
-                if (tr->new_tuple && tr->old_tuple) {
-                        new_index->replace(tr->new_tuple, tr->old_tuple, DUP_INSERT);
-                }
-        }
+        for (txn_request *tr = &txn->req; tr != NULL; tr = tr->next)
+		new_index->replace(tr->new_tuple, tr->old_tuple, DUP_INSERT);
 }
 
 /**
@@ -751,8 +748,8 @@ on_replace_in_old_space(struct trigger *trigger, void *event)
 		add2index_trigger_new(on_rollback_in_old_space, new_index);
 	trigger_set(&txn->on_rollback, on_rollback);
 	/* Put the tuple into the new index. */
-	(void) new_index->replace(txn->curr_req()->old_tuple, txn->curr_req()->new_tuple,
-                              DUP_INSERT);
+	(void) new_index->replace(txn->req.old_tuple, txn->req.new_tuple,
+				  DUP_INSERT);
 }
 
 /**
@@ -887,8 +884,9 @@ static void
 on_drop_space(struct trigger * /* trigger */, void *event)
 {
 	struct txn *txn = (struct txn *) event;
-	uint32_t id = tuple_field_u32(txn->curr_req()->old_tuple ?
-                                  txn->curr_req()->old_tuple : txn->curr_req()->new_tuple, ID);
+	uint32_t id = tuple_field_u32(txn->req.old_tuple ?
+				      txn->req.old_tuple : txn->req.new_tuple,
+				      ID);
 	struct space *space = space_cache_delete(id);
 	space_delete(space);
 }
@@ -953,8 +951,8 @@ static void
 on_replace_dd_space(struct trigger * /* trigger */, void *event)
 {
 	struct txn *txn = (struct txn *) event;
-	struct tuple *old_tuple = txn->curr_req()->old_tuple;
-	struct tuple *new_tuple = txn->curr_req()->new_tuple;
+	struct tuple *old_tuple = txn->req.old_tuple;
+	struct tuple *new_tuple = txn->req.new_tuple;
 	/*
 	 * Things to keep in mind:
 	 * - old_tuple is set only in case of UPDATE.  For INSERT
@@ -1065,8 +1063,8 @@ static void
 on_replace_dd_index(struct trigger * /* trigger */, void *event)
 {
 	struct txn *txn = (struct txn *) event;
-	struct tuple *old_tuple = txn->curr_req()->old_tuple;
-	struct tuple *new_tuple = txn->curr_req()->new_tuple;
+	struct tuple *old_tuple = txn->req.old_tuple;
+	struct tuple *new_tuple = txn->req.new_tuple;
 	uint32_t id = tuple_field_u32(old_tuple ? old_tuple : new_tuple, ID);
 	uint32_t iid = tuple_field_u32(old_tuple ? old_tuple : new_tuple,
 				       INDEX_ID);
@@ -1206,8 +1204,9 @@ static void
 user_cache_remove_user(struct trigger * /* trigger */, void *event)
 {
 	struct txn *txn = (struct txn *) event;
-	uint32_t uid = tuple_field_u32(txn->curr_req()->old_tuple ?
-                                   txn->curr_req()->old_tuple : txn->curr_req()->new_tuple, ID);
+	uint32_t uid = tuple_field_u32(txn->req.old_tuple ?
+				       txn->req.old_tuple : txn->req.new_tuple,
+				       ID);
 	user_cache_delete(uid);
 }
 
@@ -1219,7 +1218,7 @@ user_cache_replace_user(struct trigger * /* trigger */, void *event)
 {
 	struct txn *txn = (struct txn *) event;
 	struct user user;
-	user_create_from_tuple(&user, txn->curr_req()->new_tuple);
+	user_create_from_tuple(&user, txn->req.new_tuple);
 	user_cache_replace(&user);
 }
 
@@ -1233,8 +1232,8 @@ static void
 on_replace_dd_user(struct trigger * /* trigger */, void *event)
 {
 	struct txn *txn = (struct txn *) event;
-	struct tuple *old_tuple = txn->curr_req()->old_tuple;
-	struct tuple *new_tuple = txn->curr_req()->new_tuple;
+	struct tuple *old_tuple = txn->req.old_tuple;
+	struct tuple *new_tuple = txn->req.new_tuple;
 
 	uint32_t uid = tuple_field_u32(old_tuple ?
 				       old_tuple : new_tuple, ID);
@@ -1296,8 +1295,9 @@ static void
 func_cache_remove_func(struct trigger * /* trigger */, void *event)
 {
 	struct txn *txn = (struct txn *) event;
-	uint32_t fid = tuple_field_u32(txn->curr_req()->old_tuple ?
-				       txn->curr_req()->old_tuple : txn->curr_req()->new_tuple, ID);
+	uint32_t fid = tuple_field_u32(txn->req.old_tuple ?
+				       txn->req.old_tuple : txn->req.new_tuple,
+				       ID);
 	func_cache_delete(fid);
 }
 
@@ -1310,7 +1310,7 @@ func_cache_replace_func(struct trigger * /* trigger */, void *event)
 {
 	struct txn *txn = (struct txn *) event;
 	struct func_def func;
-	func_def_create_from_tuple(&func, txn->curr_req()->new_tuple);
+	func_def_create_from_tuple(&func, txn->req.new_tuple);
 	func_cache_replace(&func);
 }
 
@@ -1326,8 +1326,8 @@ on_replace_dd_func(struct trigger * /* trigger */, void *event)
 {
 	struct func_def func;
 	struct txn *txn = (struct txn *) event;
-	struct tuple *old_tuple = txn->curr_req()->old_tuple;
-	struct tuple *new_tuple = txn->curr_req()->new_tuple;
+	struct tuple *old_tuple = txn->req.old_tuple;
+	struct tuple *new_tuple = txn->req.new_tuple;
 
 	uint32_t fid = tuple_field_u32(old_tuple ?
 				       old_tuple : new_tuple, ID);
@@ -1467,8 +1467,8 @@ static void
 revoke_priv(struct trigger * /* trigger */, void *event)
 {
 	struct txn *txn = (struct txn *) event;
-	struct tuple *tuple = (txn->curr_req()->new_tuple ?
-			       txn->curr_req()->new_tuple : txn->curr_req()->old_tuple);
+	struct tuple *tuple = (txn->req.new_tuple ?
+			       txn->req.new_tuple : txn->req.old_tuple);
 	struct priv_def priv;
 	priv_def_create_from_tuple(&priv, tuple);
 	priv.access = 0;
@@ -1484,7 +1484,7 @@ modify_priv(struct trigger * /* trigger */, void *event)
 {
 	struct txn *txn = (struct txn *) event;
 	struct priv_def priv;
-	priv_def_create_from_tuple(&priv, txn->curr_req()->new_tuple);
+	priv_def_create_from_tuple(&priv, txn->req.new_tuple);
 	grant_or_revoke(&priv);
 }
 
@@ -1500,8 +1500,8 @@ on_replace_dd_priv(struct trigger * /* trigger */, void *event)
 {
 	struct priv_def priv;
 	struct txn *txn = (struct txn *) event;
-	struct tuple *old_tuple = txn->curr_req()->old_tuple;
-	struct tuple *new_tuple = txn->curr_req()->new_tuple;
+	struct tuple *old_tuple = txn->req.old_tuple;
+	struct tuple *new_tuple = txn->req.new_tuple;
 
 	if (new_tuple != NULL && old_tuple == NULL) {	/* grant */
 		priv_def_create_from_tuple(&priv, new_tuple);
@@ -1551,8 +1551,8 @@ static void
 on_replace_dd_schema(struct trigger * /* trigger */, void *event)
 {
 	struct txn *txn = (struct txn *) event;
-	struct tuple *old_tuple = txn->curr_req()->old_tuple;
-	struct tuple *new_tuple = txn->curr_req()->new_tuple;
+	struct tuple *old_tuple = txn->req.old_tuple;
+	struct tuple *new_tuple = txn->req.new_tuple;
 	const char *key = tuple_field_cstr(new_tuple ?
 					   new_tuple : old_tuple, 0);
 	if (strcmp(key, "cluster") == 0) {

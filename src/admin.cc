@@ -61,8 +61,8 @@ admin_dispatch(struct ev_io *coio, struct iobuf *iobuf, lua_State *L)
 				 fiber()->session->delim);
 
 	char *eol;
-	while (in->pos == NULL
-	       || (eol = (char *) memmem(in->pos, in->end - in->pos, delim,
+	while (in->pos == NULL ||
+	       (eol = (char *) memmem(in->pos, in->end - in->pos, delim,
 					 delim_len)) == NULL) {
 		if (coio_bread(coio, in, 1) <= 0)
 			return -1;

@@ -60,10 +60,6 @@ struct txn {
         struct txn* outer; // outer transaction
 	struct rlist on_commit;
 	struct rlist on_rollback;
-
-        txn_request* curr_req() const {
-                return tail;
-        }
 };
 
 struct txn *txn_begin();
