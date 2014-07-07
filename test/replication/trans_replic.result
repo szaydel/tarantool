@@ -36,11 +36,11 @@ do
 
     function _insert(_begin, _end)
         local a = {}
-        box.space['tweedledum']:begin()
+        box.begin()
         for i = _begin, _end do
             table.insert(a, box.space['tweedledum']:insert{i, 'the tuple '..i})
         end
-        box.space['tweedledum']:commit()
+        box.commit()
         return unpack(a)
     end
 

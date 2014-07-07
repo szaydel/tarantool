@@ -3,25 +3,25 @@ space:create_index('primary', { type = 'hash' })
 for i = 1,100,1 do space:insert({i, 100}) end
 --# setopt delimiter ';'
 for i = 1,99,1 do
-    space:begin()
+    box.begin()
     space:update({i}, {{'-', 2, 50}})
     space:update({i+1}, {{'+', 2, 50}})
-    space:commit()
+    box.commit()
 end;
 --# setopt delimiter ''
 space:select{100}
 
 --# setopt delimiter ';'
 for i = 1,1,1 do
-    space:begin()
+    box.begin()
     space:update({100}, {{'-', 2, 100}})
-    space:rollback()
+    box.rollback()
 end;
 --# setopt delimiter ''
 space:select{100}
 
-space:begin()
+box.begin()
 space:update({100}, {{'+', 2, 100}})
-space:rollback()
+box.rollback()
 
 space:drop()

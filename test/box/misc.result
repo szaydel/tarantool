@@ -16,11 +16,14 @@ t = {} for n in pairs(box) do table.insert(t, tostring(n)) end table.sort(t)
 ...
 t
 ---
-- - cfg
+- - begin
+  - cfg
+  - commit
   - error
   - index
   - info
   - raise
+  - rollback
   - schema
   - slab
   - snapshot

@@ -4,13 +4,13 @@ box.schema.user.create('test', { password = 'test' })
 box.schema.user.grant('test', 'execute,read,write', 'universe')
 ---
 ...
-space = box.schema.create_space('tweedledum', { id = 0 })
+space = box.schema.create_space('tweedledum')
 ---
 ...
-space:create_index('primary', { type = 'hash' })
+space:create_index('primary')
 ---
 ...
-function myinsert(from,till) space:begin(); for i = from,till,1 do space:insert{i} end; space:commit(); end
+function myinsert(from,till) box.begin() for i = from,till,1 do space:insert{i} end box.commit() end
 ---
 ...
 call myinsert(1, 10)

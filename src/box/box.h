@@ -96,13 +96,13 @@ void
 box_set_replication_source(const char *source);
 
 void
-box_start_trans();
+box_begin();
 
 void
-box_commit_trans(struct port* port);
+box_commit(struct port *port);
 
 void
-box_rollback_trans();
+box_rollback();
 
 void box_set_wal_mode(const char *mode);
 void box_set_log_level(int level);

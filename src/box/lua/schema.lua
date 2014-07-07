@@ -61,6 +61,10 @@ local function user_resolve(user)
     return tuple[1]
 end
 
+box.begin = internal.begin
+box.commit = internal.commit
+box.rollback = internal.rollback
+
 box.schema.space = {}
 box.schema.space.create = function(name, options)
     local _space = box.space[box.schema.SPACE_ID]
@@ -504,15 +508,6 @@ function box.schema.space.bless(space)
     end
     space_mt.insert = function(space, tuple)
         return internal.insert(space.id, tuple);
-    end
-    space_mt.begin = function(space)
-        return internal.begin();
-    end
-    space_mt.commit = function(space)
-        return internal.commit();
-    end
-    space_mt.rollback = function(space)
-        return internal.rollback();
     end
     space_mt.replace = function(space, tuple)
         return internal.replace(space.id, tuple);

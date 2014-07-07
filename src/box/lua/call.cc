@@ -371,32 +371,32 @@ lbox_delete(lua_State *L)
 
 
 static int
-lbox_start_trans(lua_State *L)
+lbox_begin(lua_State *L)
 {
         if (lua_gettop(L) != 0) {
 		return luaL_error(L, "Usage box.begin()");
         }
-	box_start_trans();
+	box_begin();
 	return lua_gettop(L);
 }
 
 static int
-lbox_commit_trans(lua_State *L)
+lbox_commit(lua_State *L)
 {
         if (lua_gettop(L) != 0) {
 		return luaL_error(L, "Usage box.commit()");
         }
-        box_commit_trans(port_lua_create(L));
+        box_commit(port_lua_create(L));
 	return lua_gettop(L);
 }
 
 static int
-lbox_rollback_trans(lua_State *L)
+lbox_rollback(lua_State *L)
 {
         if (lua_gettop(L) != 0) {
 		return luaL_error(L, "Usage box.rollback()");
         }
-        box_rollback_trans();
+        box_rollback();
 	return lua_gettop(L);
 }
 
@@ -509,8 +509,7 @@ access_check_func(const char *name, uint32_t name_len,
 
 	struct func_def *func = func_by_name(name, name_len);
 	if (func == NULL || (func->uid != user->uid && user->uid != ADMIN &&
-			     access & ~func->access[user->auth_token]))
-        {
+			     access & ~func->access[user->auth_token])) {
 		char name_buf[BOX_NAME_MAX + 1];
 		snprintf(name_buf, sizeof(name_buf), "%.*s", name_len, name);
 
@@ -534,7 +533,8 @@ box_lua_call(struct request *request, struct txn *txn, struct port *port)
 
 	uint8_t access = PRIV_X & ~user->universal_access;
 
-        txn->nesting_level = 0; /* LUA call is not treated as nested transaction */
+	/* Lua call is not treated as a nested transaction. */
+        txn->nesting_level = 0;
         txn_current() = txn;
 
 	/* Try to find a function by name */
@@ -586,9 +586,9 @@ static const struct luaL_reg boxlib_internal[] = {
 	{"replace", lbox_replace},
 	{"update", lbox_update},
 	{"delete", lbox_delete},
-	{"begin", lbox_start_trans},
-	{"commit", lbox_commit_trans},
-	{"rollback", lbox_rollback_trans},
+	{"begin", lbox_begin},
+	{"commit", lbox_commit},
+	{"rollback", lbox_rollback},
 	{NULL, NULL}
 };
 

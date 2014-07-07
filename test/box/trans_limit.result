@@ -9,42 +9,45 @@ box.cfg.transaction_limit
 ---
 - 10
 ...
-space = box.schema.create_space('tweedledum', { id = 0 })
+space = box.schema.create_space('tweedledum')
 ---
 ...
-space:create_index('primary', { type = 'hash' })
+space:create_index('primary')
 ---
 ...
 --# setopt delimiter ';'
 function do_transaction()
-    space:begin()
-    for i = 1,100,1 do space:insert{i} end
-    space:commit()
+    box.begin()
+    for i = 1,100,1 do
+        space:insert{i}
+    end
+    box.commit()
 end;
 ---
 ...
-do_transaction();
+--# setopt delimiter ''
+do_transaction()
 ---
 - error: 'Number of requests in multi-statement transaction exceeds limit: 10'
 ...
-space:len();
+space:len()
 ---
 - 0
 ...
-box.cfg{transaction_limit=0};
+box.cfg{transaction_limit=0}
 ---
 ...
-box.cfg.transaction_limit;
+box.cfg.transaction_limit
 ---
 - 0
 ...
-do_transaction();
+do_transaction()
 ---
 ...
-space:len();
+space:len()
 ---
 - 100
 ...
-space:drop();
+space:drop()
 ---
 ...

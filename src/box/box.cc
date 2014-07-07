@@ -98,9 +98,9 @@ static void on_fiber_reschedule()
 }
 
 void
-box_start_trans()
+box_begin()
 {
-        struct txn* txn = txn_current();
+        struct txn *txn = txn_current();
         if (txn != NULL && txn->nesting_level != 0) { /* transaction statred for CALL request has nesting_level == 0 */
                 txn->nesting_level += 1;
         } else {
@@ -110,12 +110,12 @@ box_start_trans()
 }
 
 void
-box_commit_trans(struct port *port)
+box_commit(struct port *port)
 {
-        struct txn* txn = txn_current();
-        if (txn == NULL) {
+        struct txn *txn = txn_current();
+        if (txn == NULL)
 		tnt_raise(LoggedError, ER_NO_ACTIVE_TRANSACTION);
-        }
+
         if (--txn->nesting_level == 0)  {
                 txn_current() = NULL;
                 try {
@@ -130,12 +130,12 @@ box_commit_trans(struct port *port)
 }
 
 void
-box_rollback_trans()
+box_rollback()
 {
-        struct txn* txn = txn_current();
-        if (txn == NULL) {
+        struct txn *txn = txn_current();
+        if (txn == NULL)
 		tnt_raise(LoggedError, ER_NO_ACTIVE_TRANSACTION);
-        }
+
         txn_current() = NULL;
         txn_rollback(txn);
 }
@@ -181,26 +181,17 @@ recover_row(void *param __attribute__((unused)), struct iproto_header *row)
         struct request request;
 	try {
 		assert(row->bodycnt == 1); /* always 1 for read */
-                if ((row->flags & (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS)) == (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS)) {
-                        box_start_trans();
-                }
+                if ((row->flags & (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS)) == (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS))
+                        box_begin();
 		request_create(&request, row->type);
 		request_decode(&request, (const char *) row->body[0].iov_base,
                                row->body[0].iov_len);
 		request.header = row;
 		process_rw(&null_port, &request);
-                if ((row->flags & (WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT)) == WAL_REQ_FLAG_IN_TRANS) {
-                        box_commit_trans(&null_port);
-                }
+                if ((row->flags & (WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT)) == WAL_REQ_FLAG_IN_TRANS)
+                        box_commit(&null_port);
 	} catch (Exception *e) {
 		e->log();
-                if (row->flags & WAL_REQ_FLAG_IN_TRANS) {
-                        try {
-                                box_rollback_trans();
-                        } catch (Exception *x) {
-                                x->log();
-                        }
-                }
 	}
 }
 
