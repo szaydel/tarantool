@@ -76,22 +76,21 @@ struct request_replace_body {
 void
 port_send_tuple(struct port *port, struct txn *txn)
 {
-        txn_request* tr = txn->tail;
-        if (tr != NULL) {
+        txn_stmt *stmt = txn->tail;
+        if (stmt != NULL) {
                 struct tuple *tuple;
-                if ((tuple = tr->new_tuple) || (tuple = tr->old_tuple)) {
+                if ((tuple = stmt->new_tuple) || (tuple = stmt->old_tuple))
                         port_add_tuple(port, tuple);
-                }
         }
 }
 
 static void on_fiber_reschedule()
 {
-        struct txn * txn = txn_current();
+        struct txn * txn = in_txn();
         if (txn != NULL) {
                 // throwing exception in this place cause abnormal termination of Tarantool
 		//tnt_raise(LoggedError, ER_YIELD_NOT_ALLOWED);
-                txn_current() = NULL;
+                in_txn() = NULL;
                 // resetting fiber()->gc() region in rollback cause crash
                 //txn_rollback(txn);
         }
@@ -100,24 +99,24 @@ static void on_fiber_reschedule()
 void
 box_begin()
 {
-        struct txn *txn = txn_current();
+        struct txn *txn = in_txn();
         if (txn != NULL && txn->nesting_level != 0) { /* transaction statred for CALL request has nesting_level == 0 */
                 txn->nesting_level += 1;
         } else {
                 fiber()->on_reschedule_callback = on_fiber_reschedule;
-                txn_current() = txn_begin();
+                in_txn() = txn_begin();
         }
 }
 
 void
 box_commit(struct port *port)
 {
-        struct txn *txn = txn_current();
+        struct txn *txn = in_txn();
         if (txn == NULL)
 		tnt_raise(LoggedError, ER_NO_ACTIVE_TRANSACTION);
 
         if (--txn->nesting_level == 0)  {
-                txn_current() = NULL;
+                in_txn() = NULL;
                 try {
                         txn_commit(txn);
                         port_eof(port);
@@ -132,18 +131,18 @@ box_commit(struct port *port)
 void
 box_rollback()
 {
-        struct txn *txn = txn_current();
+        struct txn *txn = in_txn();
         if (txn == NULL)
 		tnt_raise(LoggedError, ER_NO_ACTIVE_TRANSACTION);
 
-        txn_current() = NULL;
+        in_txn() = NULL;
         txn_rollback(txn);
 }
 
 static void
 process_rw(struct port *port, struct request *request)
 {
-        struct txn *txn = txn_current();
+        struct txn *txn = in_txn();
         bool autocommit = false;
         if (txn == NULL || txn->nesting_level == 0) { /* transaction statred for CALL request has nesting_level == 0 */
                 txn = txn_begin();
@@ -161,7 +160,7 @@ process_rw(struct port *port, struct request *request)
                         txn_finish(txn);
                 }
 	} catch (Exception *e) {
-                txn_current() = NULL;
+                in_txn() = NULL;
 		txn_rollback(txn);
 		throw;
 	}

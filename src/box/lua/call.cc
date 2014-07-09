@@ -535,7 +535,7 @@ box_lua_call(struct request *request, struct txn *txn, struct port *port)
 
 	/* Lua call is not treated as a nested transaction. */
         txn->nesting_level = 0;
-        txn_current() = txn;
+        in_txn() = txn;
 
 	/* Try to find a function by name */
 	int oc = box_lua_find(L, name, name + name_len);
@@ -555,7 +555,7 @@ box_lua_call(struct request *request, struct txn *txn, struct port *port)
 		luamp_decode(L, &args);
 	}
 	lbox_call(L, arg_count + oc - 1, LUA_MULTRET);
-        txn_current() = NULL;
+        in_txn() = NULL;
 	/* Send results of the called procedure to the client. */
 	port_add_lua_multret(port, L);
 }

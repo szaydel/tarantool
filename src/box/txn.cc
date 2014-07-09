@@ -40,18 +40,18 @@
 double too_long_threshold;
 int multistatement_transaction_limit;
 
-static txn_request* new_txn_request(struct txn *txn)
+static txn_stmt* new_txn_stmt(struct txn *txn)
 {
-        txn_request* tr;
-        txn->n_requests += 1;
-        if (multistatement_transaction_limit != 0 && txn->n_requests > multistatement_transaction_limit) {
-                txn_current() = NULL;
+        txn_stmt* tr;
+        txn->n_stmts += 1;
+        if (multistatement_transaction_limit != 0 && txn->n_stmts > multistatement_transaction_limit) {
+                in_txn() = NULL;
 		tnt_raise(LoggedError, ER_TRANSACTION_TOO_LONG, multistatement_transaction_limit);
         }
         if (txn->tail == NULL) {
-                txn->tail = tr = &txn->req;
+                txn->tail = tr = &txn->stmt;
         } else {
-                tr = (txn_request*)region_alloc0(&fiber()->gc, sizeof(*tr));
+                tr = (txn_stmt*)region_alloc0(&fiber()->gc, sizeof(*tr));
                 txn->tail = txn->tail->next = tr;
         }
         tr->next = NULL;
@@ -62,7 +62,7 @@ static txn_request* new_txn_request(struct txn *txn)
 void
 txn_add_redo(struct txn *txn, struct request *request)
 {
-        txn_request* tr = new_txn_request(txn);
+        txn_stmt* tr = new_txn_stmt(txn);
 	tr->row = request->header;
 	if (recovery_state->wal_mode == WAL_NONE || request->header != NULL) {
 		return;
@@ -80,7 +80,7 @@ txn_replace(struct txn *txn, struct space *space,
 	    enum dup_replace_mode mode)
 {
 	assert(old_tuple || new_tuple);
-        txn_request* tr = txn->tail;
+        txn_stmt* tr = txn->tail;
         assert(tr != NULL);
 	/*
 	 * Remember the old tuple only if we replaced it
@@ -110,8 +110,8 @@ txn_begin()
 	rlist_create(&txn->on_rollback);
         txn->tail = NULL;
         txn->nesting_level = 1;
-        txn->n_requests = 0;
-        txn->outer = txn_current();
+        txn->n_stmts = 0;
+        txn->outer = in_txn();
 	return txn;
 }
 
@@ -121,7 +121,7 @@ txn_commit(struct txn *txn)
         if (txn->tail == NULL) {
                 return; /* nothing to commit */
         }
-        txn_request* tr = &txn->req;
+        txn_stmt* tr = &txn->stmt;
         int flags = WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT;
 
         // First set flags
@@ -147,7 +147,7 @@ txn_commit(struct txn *txn)
                 last_row->flags &= ~WAL_REQ_FLAG_HAS_NEXT;
 	}
 	// And now send rows to WAL writers
-	tr = &txn->req;
+	tr = &txn->stmt;
 	do {
 		if ((tr->old_tuple || tr->new_tuple) &&
 		    !space_is_temporary(tr->space))
@@ -185,7 +185,7 @@ void
 txn_finish(struct txn *txn)
 {
         if (txn->tail != NULL) {
-                txn_request* tr = &txn->req;
+                txn_stmt *tr = &txn->stmt;
                 do {
                         if (tr->old_tuple) {
                                 tuple_ref(tr->old_tuple, -1);
@@ -208,7 +208,7 @@ void
 txn_rollback(struct txn *txn)
 {
         if (txn->tail != NULL) {
-                txn_request* tr = &txn->req;
+                txn_stmt *tr = &txn->stmt;
                 do {
                         if (tr->old_tuple || tr->new_tuple) {
                                 space_replace(tr->space, tr->new_tuple,

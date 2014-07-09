@@ -36,28 +36,38 @@ extern int multistatement_transaction_limit;
 struct tuple;
 struct space;
 
-struct txn_request {
-        /* L1-list of requests for multistatement transaction */
-        txn_request* next;
+/**
+ * A single statement of a multi-statement
+ * transaction: undo and redo info.
+ */
+struct txn_stmt {
+	/** L1-list of statements of a multi-statement transaction. */
+	txn_stmt *next;
 
-	/* Undo info. */
+	/** Undo info. */
 	struct space *space;
 	struct tuple *old_tuple;
 	struct tuple *new_tuple;
 
-	/* Redo info: list of binary row */
-	struct iproto_header* row;
+	/** Redo info: the binary log row */
+	struct iproto_header *row;
 };
 
 /* pointer to the current multithreaded transaction (if any) */
-#define txn_current() (fiber()->session->txn)
+#define in_txn() (fiber()->session->txn)
 
 struct txn {
-        txn_request req;
-        txn_request* tail; // tail for L1-list of transaction requests
-        int nesting_level;
-        int n_requests;
-        struct txn* outer; // outer transaction
+	/**
+	 * Each transaction has at least one statement. This is
+	 * it, the first statement of the transaction.
+	 */
+	txn_stmt stmt;
+	/** The last statement of the multi-statement transaction. */
+	txn_stmt *tail;
+	int nesting_level;
+	int n_stmts;
+	/** Outer transaction */
+	struct txn *outer;
 	struct rlist on_commit;
 	struct rlist on_rollback;
 };
