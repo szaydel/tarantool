@@ -39,7 +39,7 @@ fiber.resume(f)
 ...
 failed
 ---
-- true
+- false
 ...
 f1 = fiber.create(function() if session.id() == 0 then failed = true end end)
 ---
@@ -50,7 +50,7 @@ fiber.resume(f1)
 ...
 failed
 ---
-- true
+- false
 ...
 session.peer() == session.peer(session.id())
 ---
