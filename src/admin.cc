@@ -98,7 +98,6 @@ admin_handler(va_list ap)
 	struct ev_io coio = va_arg(ap, struct ev_io);
 	struct sockaddr *addr = va_arg(ap, struct sockaddr *);
 	struct iobuf *iobuf = va_arg(ap, struct iobuf *);
-
 	lua_State *L = lua_newthread(tarantool_L);
 	LuarefGuard coro_guard(tarantool_L);
 	/*

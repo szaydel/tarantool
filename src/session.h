@@ -57,9 +57,9 @@ struct session {
 	/** A look up key to quickly find session user. */
 	uint8_t auth_token;
 	/** User id of the authenticated user. */
+	uint32_t uid;
 	/** Current transaction, if started. */
 	struct txn *txn;
-	uint32_t uid;
 	/** Command delimiter - used by admin console and interactive mode */
 	char delim[SESSION_DELIM_SIZE];
 };

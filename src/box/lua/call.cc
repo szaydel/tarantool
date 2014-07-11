@@ -235,9 +235,7 @@ lbox_request_create(struct lua_State *L, enum iproto_request_type type,
 	struct request *request = (struct request *)
 		region_alloc(&fiber()->gc, sizeof(struct request));
 	request_create(request, type);
-	if (lua_gettop(L) > 0) {
-		request->space_id = lua_tointeger(L, 1);
-	}
+	request->space_id = lua_tointeger(L, 1);
 	if (key > 0) {
 		struct tbuf *key_buf = tbuf_new(&fiber()->gc);
 		luamp_encode(L, key_buf, key);
