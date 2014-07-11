@@ -310,8 +310,8 @@ recover_snap(struct recovery_state *r)
 }
 
 struct iproto_row_list {
-    iproto_header row;
-    iproto_row_list* next;
+	iproto_header row;
+	iproto_row_list* next;
 };
 
 #define LOG_EOF 0
@@ -330,41 +330,41 @@ recover_wal(struct recovery_state *r, struct log_io *l)
 	log_io_cursor_open(&i, l);
 
 	struct iproto_header row;
-        iproto_row_list* row_list_head = NULL;
-        iproto_row_list* row_list_tail = NULL;
+	iproto_row_list* row_list_head = NULL;
+	iproto_row_list* row_list_tail = NULL;
 
 	while (log_io_cursor_next(&i, &row, false) == 0) {
-                if ((row.flags & (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT))
+		if ((row.flags & (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT))
 		    == (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT))
-                {
-                        int64_t lsn = row.lsn;
+		{
+			int64_t lsn = row.lsn;
 			uint32_t node_id = row.server_id;
-                        // multistatement transaction
-                        do {
-                                if (row.lsn != lsn || row.server_id != node_id
+			// multistatement transaction
+			do {
+				if (row.lsn != lsn || row.server_id != node_id
 				    || !(row.flags & WAL_REQ_FLAG_IN_TRANS))
 				{
-                                        row.flags |= WAL_REQ_FLAG_HAS_NEXT;
+					row.flags |= WAL_REQ_FLAG_HAS_NEXT;
 					// goto say_error("can't read multistatement transaction");
-                                        break;
-                                }
-                                iproto_row_list* node = (iproto_row_list*)region_alloc(&fiber()->gc, sizeof(iproto_row_list));
-                                if (row_list_head == NULL) {
-                                        row_list_head = node;
-                                } else {
-                                        row_list_tail->next = node;
-                                }
-                                row_list_tail = node;
-                                node->row = row;
-                                lsn += 1; // requests of multistatement transaction should have subsequent LSNs
-                        } while ((row.flags & WAL_REQ_FLAG_HAS_NEXT) && log_io_cursor_next(&i, &row, true) == 0);
+					break;
+				}
+				iproto_row_list* node = (iproto_row_list*)region_alloc(&fiber()->gc, sizeof(iproto_row_list));
+				if (row_list_head == NULL) {
+					row_list_head = node;
+				} else {
+					row_list_tail->next = node;
+				}
+				row_list_tail = node;
+				node->row = row;
+				lsn += 1; // requests of multistatement transaction should have subsequent LSNs
+			} while ((row.flags & WAL_REQ_FLAG_HAS_NEXT) && log_io_cursor_next(&i, &row, true) == 0);
 
-                        if (row.flags & WAL_REQ_FLAG_HAS_NEXT) { // failed to read all multistatement transaction
-                                say_error("can't read multistatement transaction");
-                                continue;
-                        }
-                        assert(row_list_head != NULL); // have at least one row
-                        while (true) {
+			if (row.flags & WAL_REQ_FLAG_HAS_NEXT) { // failed to read all multistatement transaction
+				say_error("can't read multistatement transaction");
+				continue;
+			}
+			assert(row_list_head != NULL); // have at least one row
+			while (true) {
 				try {
 					recovery_process(r, &row);
 				} catch (SocketError *e) {
@@ -375,18 +375,18 @@ recover_wal(struct recovery_state *r, struct log_io *l)
 					if (l->dir->panic_if_error)
 						goto end;
 				}
-                                /* fiber()->gc region will be deallocated after processing of last request,
-                                 * so do not access object allcoated in this region after it
-                                 */
-                                if (row_list_head == row_list_tail) {
-                                        break;
-                                }
-                                row_list_head = row_list_head->next;
-                        }
-                } else if (row.flags & WAL_REQ_FLAG_IN_TRANS) {
+				/* fiber()->gc region will be deallocated after processing of last request,
+				 * so do not access object allcoated in this region after it
+			 */
+				if (row_list_head == row_list_tail) {
+					break;
+				}
+				row_list_head = row_list_head->next;
+			}
+		} else if (row.flags & WAL_REQ_FLAG_IN_TRANS) {
 			say_debug("skipping internal row of multistatement transaction");
 			continue;
-                } else  {
+		} else  {
 			try {
 				recovery_process(r, &row);
 			} catch (SocketError *e) {
@@ -397,10 +397,10 @@ recover_wal(struct recovery_state *r, struct log_io *l)
 				if (l->dir->panic_if_error)
 					goto end;
 			}
-                }
+		}
 	}
 	res = i.eof_read ? LOG_EOF : 1;
-  end:
+end:
 	log_io_cursor_close(&i);
 	/* Sic: we don't close the log here. */
 	return res;
@@ -764,7 +764,6 @@ wal_writer_init_once()
         (void) tt_pthread_atfork(NULL, NULL, wal_writer_child);
 }
 
-
 /**
  * A commit watcher callback is invoked whenever there
  * are requests in wal_writer->commit. This callback is
@@ -789,25 +788,25 @@ wal_schedule_queue(struct wal_fifo *queue, struct wal_writer *writer)
 	 */
 	struct wal_write_request *req, *tmp;
 	STAILQ_FOREACH_SAFE(req, queue, wal_fifo_entry, tmp) {
-                if (req->row->flags & WAL_REQ_FLAG_IN_TRANS) {
+		if (req->row->flags & WAL_REQ_FLAG_IN_TRANS) {
 			/* Accumulate total result of
 			 * multistatement transaction in prev_lsn.
-                         * Result is 0 (ok) or -1 (error) so use OR.
+			 * Result is 0 (ok) or -1 (error) so use OR.
 			 * Also update req->res, so that last
 			 * request of multistatement transaction
 			 * contains cumulative result
-                         */
+		 */
 			if (writer->prev_lsn < 0) {
 				req->res = -1;
 			} else {
 				writer->prev_lsn = req->res;
 			}
-                }
-                if (!(req->row->flags & WAL_REQ_FLAG_HAS_NEXT)) {
-                        fiber_call(req->fiber);
-                        writer->prev_lsn = 0; /* prepare for new multistatement transaction */
-                }
-        }
+		}
+		if (!(req->row->flags & WAL_REQ_FLAG_HAS_NEXT)) {
+			fiber_call(req->fiber);
+			writer->prev_lsn = 0; /* prepare for new multistatement transaction */
+		}
+	}
 }
 
 static void
@@ -1028,7 +1027,7 @@ wal_opt_rotate(struct log_io **wal, struct recovery_state *r,
 	}
 	assert(wal_to_close == NULL);
 	*wal = l;
-        fiber_gc();
+	fiber_gc();
 	return l ? 0 : -1;
 }
 
@@ -1039,8 +1038,8 @@ wal_fill_batch(struct log_io *wal, struct fio_batch *batch, int rows_per_wal,
 	int max_rows = wal->is_inprogress ? 1 : rows_per_wal - wal->rows;
 	/* Post-condition of successful wal_opt_rotate(). */
 	if (max_rows <= 0) { // for multistatement transaction we can write more than rows_per_wal in log file
-                max_rows = 1;
-        }
+		max_rows = 1;
+	}
 	fio_batch_start(batch, max_rows);
 
 	struct iovec iov[XLOG_ROW_IOVMAX];
@@ -1079,21 +1078,21 @@ wal_write_to_disk(struct recovery_state *r, struct wal_writer *writer,
 	struct wal_write_request *write_end = req;
 
 	while (req) {
-                bool in_multistatement_trans = (req->row->flags & (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS)) == WAL_REQ_FLAG_IN_TRANS;
-                if (!in_multistatement_trans /* can not switch log until multistatement transaction is finished */
-                    && wal_opt_rotate(wal, r, &writer->vclock) != 0)
-                {
-                        break;
-                }
-                struct wal_write_request *batch_end;
+		bool in_multistatement_trans = (req->row->flags & (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS)) == WAL_REQ_FLAG_IN_TRANS;
+		if (!in_multistatement_trans /* can not switch log until multistatement transaction is finished */
+		    && wal_opt_rotate(wal, r, &writer->vclock) != 0)
+		{
+			break;
+		}
+		struct wal_write_request *batch_end;
 		batch_end = wal_fill_batch(*wal, batch,
 					   r->rows_per_wal, req);
-                write_end = wal_write_batch(*wal, batch, req, batch_end,
+		write_end = wal_write_batch(*wal, batch, req, batch_end,
 					    &writer->vclock);
-                if (batch_end != write_end)
-                        break;
-                req = write_end;
-        }
+		if (batch_end != write_end)
+			break;
+		req = write_end;
+	}
 	STAILQ_SPLICE(input, write_end, wal_fifo_entry, rollback);
 	STAILQ_CONCAT(commit, input);
 }
@@ -1111,7 +1110,6 @@ wal_writer_thread(void *worker_args)
 	(void) tt_pthread_mutex_lock(&writer->mutex);
 	while (! writer->is_shutdown) {
 		wal_writer_pop(writer, &input);
-
 		(void) tt_pthread_mutex_unlock(&writer->mutex);
 
 		wal_write_to_disk(r, writer, &input, &commit, &rollback);
@@ -1170,14 +1168,13 @@ wal_write(struct recovery_state *r, struct iproto_header *row)
 	bool input_was_empty = STAILQ_EMPTY(&writer->input);
 	STAILQ_INSERT_TAIL(&writer->input, req, wal_fifo_entry);
 
-	if (input_was_empty) {
+	if (input_was_empty)
 		(void) tt_pthread_cond_signal(&writer->cond);
-        }
+
 	(void) tt_pthread_mutex_unlock(&writer->mutex);
 
-        if (row->flags & WAL_REQ_FLAG_HAS_NEXT) {
+	if (row->flags & WAL_REQ_FLAG_HAS_NEXT)
 		return 0;
-	}
 	fiber_yield(); /* Request was inserted. */
 
 	/* req->res is -1 on error */
@@ -1292,5 +1289,4 @@ snapshot_save(struct recovery_state *r)
 }
 
 /* }}} */
-
 

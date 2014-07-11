@@ -254,15 +254,14 @@ region_alloc_cb(void *ctx, size_t size)
 struct RegionGuard {
 	struct region *region;
 	size_t used;
-        
+
 	RegionGuard(struct region *_region)
-        : region(_region),
-          used(region_used(_region)) 
-        {
-	}
+		: region(_region),
+		used(region_used(_region)) 
+	{}
 
 	~RegionGuard() {
-                region_truncate(region, used);
+		region_truncate(region, used);
 	}
 };
 #endif

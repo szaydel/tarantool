@@ -167,9 +167,9 @@ struct iproto_header {
 	uint32_t server_id;
 	uint64_t sync;
 	uint64_t lsn;
-	double   tm;
-	int      bodycnt;
+	double tm;
 
+	int bodycnt;
 	struct iovec body[IPROTO_PACKET_BODY_IOVMAX];
 };
 

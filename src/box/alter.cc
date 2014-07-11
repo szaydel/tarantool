@@ -156,9 +156,9 @@ space_def_create_from_tuple(struct space_def *def, struct tuple *tuple,
 	def->uid = tuple_field_u32(tuple, UID);
 	def->field_count = tuple_field_u32(tuple, FIELD_COUNT);
 	int namelen = snprintf(def->name, sizeof(def->name),
-			 "%s", tuple_field_cstr(tuple, NAME));
+			       "%s", tuple_field_cstr(tuple, NAME));
 	int engine_namelen = snprintf(def->engine_name, sizeof(def->engine_name),
-			 "%s", tuple_field_cstr(tuple, ENGINE));
+				      "%s", tuple_field_cstr(tuple, ENGINE));
 
 	space_def_init_flags(def, tuple);
 	space_def_check(def, namelen, engine_namelen, errcode);
@@ -351,7 +351,7 @@ alter_space_rollback(struct trigger *trigger, void * /* event */)
 	struct alter_space *alter = (struct alter_space *) trigger->data;
 #if 0
 	/* Clear the lock, first thing. */
-		op->rollback(alter);
+	op->rollback(alter);
 	space_remove_trigger(alter);
 #endif
 	class AlterSpaceOp *op;
@@ -435,7 +435,7 @@ alter_space_do(struct txn *txn, struct alter_space *alter,
 	 * Create a new (empty) space for the new definition.
 	 * Sic: the space engine is not the same yet, the
 	 * triggers are not set.
-         */
+	 */
 	alter->new_space = space_new(&alter->space_def, &alter->key_list);
 	/*
 	 * Copy the engine, the new space is at the same recovery
@@ -727,7 +727,7 @@ on_rollback_in_old_space(struct trigger *trigger, void *event)
 	struct txn *txn = (struct txn *) event;
 	Index *new_index = (Index *) trigger->data;
 	/* Remove the failed tuple from the new index. */
-        for (struct txn_stmt *stmt = &txn->stmt; stmt; stmt = stmt->next) {
+	for (struct txn_stmt *stmt = &txn->stmt; stmt; stmt = stmt->next) {
 		new_index->replace(stmt->new_tuple, stmt->old_tuple,
 				   DUP_INSERT);
 	}
@@ -842,7 +842,7 @@ AddIndex::alter(struct alter_space *alter)
 	struct tuple *tuple;
 	struct tuple_format *format = alter->new_space->format;
 	char *field_map = ((char *) region_alloc(&fiber()->gc,
-					   format->field_map_size) +
+						 format->field_map_size) +
 			   format->field_map_size);
 	while ((tuple = it->next(it))) {
 		/*
@@ -1014,7 +1014,7 @@ on_replace_dd_space(struct trigger * /* trigger */, void *event)
 		 */
 		struct alter_space *alter = alter_space_new();
 		auto scoped_guard =
-		        make_scoped_guard([=] {alter_space_delete(alter);});
+			make_scoped_guard([=] {alter_space_delete(alter);});
 		ModifySpace *modify =
 			AlterSpaceOp::create<ModifySpace>();
 		alter_space_add_op(alter, modify);

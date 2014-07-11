@@ -639,7 +639,7 @@ main(int argc, char **argv)
 	bool start_loop = false;
 	try {
 		SessionGuard session_guard(-1, 0);
-                int events = ev_activecnt(loop());
+		int events = ev_activecnt(loop());
 		/*
 		 * Load user init script.  The script should have access
 		 * to Tarantool Lua API (box.cfg, box.fiber, etc...) that

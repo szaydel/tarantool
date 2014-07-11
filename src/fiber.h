@@ -108,7 +108,7 @@ struct fiber {
 	uint32_t flags;
 	struct fiber *waiter;
 	uint64_t cookie;
-    void (*on_reschedule_callback)();
+	void (*on_reschedule_callback)();
 };
 
 enum { FIBER_CALL_STACK = 16 };

@@ -40,38 +40,38 @@
 double too_long_threshold;
 int multistatement_transaction_limit;
 
-static txn_stmt* new_txn_stmt(struct txn *txn)
+static txn_stmt *
+txn_stmt_new(struct txn *txn)
 {
-        txn_stmt* tr;
-        txn->n_stmts += 1;
-        if (multistatement_transaction_limit != 0 && txn->n_stmts > multistatement_transaction_limit) {
-                in_txn() = NULL;
+	struct txn_stmt *stmt;
+	txn->n_stmts++;
+	if (multistatement_transaction_limit != 0 && txn->n_stmts > multistatement_transaction_limit) {
+		in_txn() = NULL;
 		tnt_raise(LoggedError, ER_TRANSACTION_TOO_LONG, multistatement_transaction_limit);
-        }
-        if (txn->tail == NULL) {
-                txn->tail = tr = &txn->stmt;
-        } else {
-                tr = (txn_stmt*)region_alloc0(&fiber()->gc, sizeof(*tr));
-                txn->tail = txn->tail->next = tr;
-        }
-        tr->next = NULL;
-        return tr;
+	}
+	if (txn->tail == NULL) {
+		txn->tail = stmt = &txn->stmt;
+	} else {
+		stmt = (txn_stmt*)region_alloc0(&fiber()->gc, sizeof(*stmt));
+		txn->tail = txn->tail->next = stmt;
+	}
+	stmt->next = NULL;
+	return stmt;
 }
 
 
 void
 txn_add_redo(struct txn *txn, struct request *request)
 {
-        txn_stmt* tr = new_txn_stmt(txn);
-	tr->row = request->header;
-	if (recovery_state->wal_mode == WAL_NONE || request->header != NULL) {
+	struct txn_stmt *stmt = txn_stmt_new(txn);
+	stmt->row = request->header;
+	if (recovery_state->wal_mode == WAL_NONE || request->header != NULL)
 		return;
-        }
-        struct iproto_header *row = (struct iproto_header *)
+	struct iproto_header *row = (struct iproto_header *)
 		region_alloc0(&fiber()->gc, sizeof(struct iproto_header));
 	row->type = request->type;
 	row->bodycnt = request_encode(request, row->body);
-	tr->row = row;
+	stmt->row = row;
 }
 
 void
@@ -80,19 +80,19 @@ txn_replace(struct txn *txn, struct space *space,
 	    enum dup_replace_mode mode)
 {
 	assert(old_tuple || new_tuple);
-        txn_stmt* tr = txn->tail;
-        assert(tr != NULL);
+	struct txn_stmt *stmt = txn->tail;
+	assert(stmt != NULL);
 	/*
 	 * Remember the old tuple only if we replaced it
 	 * successfully, to not remove a tuple inserted by
 	 * another transaction in rollback().
 	 */
-	tr->old_tuple = space_replace(space, old_tuple, new_tuple, mode);
+	stmt->old_tuple = space_replace(space, old_tuple, new_tuple, mode);
 	if (new_tuple) {
-		tr->new_tuple = new_tuple;
-		tuple_ref(tr->new_tuple, 1);
+		stmt->new_tuple = new_tuple;
+		tuple_ref(stmt->new_tuple, 1);
 	}
-	tr->space = space;
+	stmt->space = space;
 	/*
 	 * Run on_replace triggers. For now, disallow mutation
 	 * of tuples in the trigger.
@@ -108,51 +108,49 @@ txn_begin()
 		region_alloc0(&fiber()->gc, sizeof(*txn));
 	rlist_create(&txn->on_commit);
 	rlist_create(&txn->on_rollback);
-        txn->tail = NULL;
-        txn->nesting_level = 1;
-        txn->n_stmts = 0;
-        txn->outer = in_txn();
+	txn->nesting_level = 1;
+	txn->outer = in_txn();
 	return txn;
 }
 
 void
 txn_commit(struct txn *txn)
 {
-        if (txn->tail == NULL) {
-                return; /* nothing to commit */
-        }
-        txn_stmt* tr = &txn->stmt;
-        int flags = WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT;
+	if (txn->tail == NULL) {
+		return; /* nothing to commit */
+	}
+	struct txn_stmt *stmt = &txn->stmt;
+	int flags = WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT;
 
-        // First set flags
-        struct iproto_header* last_row = NULL;
-        do {
-                if ((tr->old_tuple || tr->new_tuple) &&
-                    !space_is_temporary(tr->space))
-                {
+	// First set flags
+	struct iproto_header *last_row = NULL;
+	do {
+		if ((stmt->old_tuple || stmt->new_tuple) &&
+		    !space_is_temporary(stmt->space))
+		{
 			if (recovery_state->wal_mode != WAL_NONE) {
-				struct iproto_header* row = tr->row;
+				struct iproto_header *row = stmt->row;
 				assert(row != NULL);
 				row->flags = flags;
 				last_row = row;
 				flags &= ~WAL_REQ_FLAG_IS_FIRST;
 			}
 		}
-        } while ((tr = tr->next) != NULL);
+	} while ((stmt = stmt->next) != NULL);
 
-        if (last_row != NULL) {
-                if (last_row->flags & WAL_REQ_FLAG_IS_FIRST) { // transaction with single statement
-                        last_row->flags &= ~WAL_REQ_FLAG_IN_TRANS;
-                }
-                last_row->flags &= ~WAL_REQ_FLAG_HAS_NEXT;
+	if (last_row != NULL) {
+		if (last_row->flags & WAL_REQ_FLAG_IS_FIRST) { // transaction with single statement
+			last_row->flags &= ~WAL_REQ_FLAG_IN_TRANS;
+		}
+		last_row->flags &= ~WAL_REQ_FLAG_HAS_NEXT;
 	}
 	// And now send rows to WAL writers
-	tr = &txn->stmt;
+	stmt = &txn->stmt;
 	do {
-		if ((tr->old_tuple || tr->new_tuple) &&
-		    !space_is_temporary(tr->space))
+		if ((stmt->old_tuple || stmt->new_tuple) &&
+		    !space_is_temporary(stmt->space))
 		{
-			struct iproto_header* row = tr->row;
+			struct iproto_header *row = stmt->row;
 			int res = 0;
 			/* txn_commit() must be done after txn_add_redo() */
 			assert(recovery_state->wal_mode == WAL_NONE ||
@@ -170,9 +168,9 @@ txn_commit(struct txn *txn)
 			if (res)
 				tnt_raise(LoggedError, ER_WAL_IO);
 		}
-	} while ((tr = tr->next) != NULL);
+	} while ((stmt = stmt->next) != NULL);
 
-        trigger_run(&txn->on_commit, txn); /* must not throw. */
+	trigger_run(&txn->on_commit, txn); /* must not throw. */
 }
 
 /**
@@ -184,47 +182,47 @@ txn_commit(struct txn *txn)
 void
 txn_finish(struct txn *txn)
 {
-        if (txn->tail != NULL) {
-                txn_stmt *tr = &txn->stmt;
-                do {
-                        if (tr->old_tuple) {
-                                tuple_ref(tr->old_tuple, -1);
-                        }
-			if (tr->space)
-				tr->space->engine->factory->txnFinish(txn);
-                } while ((tr = tr->next) != NULL);
-        }
-        fiber()->on_reschedule_callback = NULL;
-        if (txn->outer == NULL) {
-                TRASH(txn);
-                fiber_gc();
-        } else {
-                TRASH(txn);
-        }
+	if (txn->tail != NULL) {
+		struct txn_stmt *stmt = &txn->stmt;
+		do {
+			if (stmt->old_tuple) {
+				tuple_ref(stmt->old_tuple, -1);
+			}
+			if (stmt->space)
+				stmt->space->engine->factory->txnFinish(txn);
+		} while ((stmt = stmt->next) != NULL);
+	}
+	fiber()->on_reschedule_callback = NULL;
+	if (txn->outer == NULL) {
+		TRASH(txn);
+		fiber_gc();
+	} else {
+		TRASH(txn);
+	}
 }
 
 
 void
 txn_rollback(struct txn *txn)
 {
-        if (txn->tail != NULL) {
-                txn_stmt *tr = &txn->stmt;
-                do {
-                        if (tr->old_tuple || tr->new_tuple) {
-                                space_replace(tr->space, tr->new_tuple,
-                                              tr->old_tuple, DUP_INSERT);
-                                trigger_run(&txn->on_rollback, tr); /* must not throw. */
-                                if (tr->new_tuple) {
-                                        tuple_ref(tr->new_tuple, -1);
-                                }
-                        }
-                } while ((tr = tr->next) != NULL);
-        }
-        fiber()->on_reschedule_callback = NULL;
-        if (txn->outer == NULL) {
-                TRASH(txn);
-                fiber_gc();
-        } else {
-                TRASH(txn);
-        }
+	if (txn->tail != NULL) {
+		struct txn_stmt *stmt = &txn->stmt;
+		do {
+			if (stmt->old_tuple || stmt->new_tuple) {
+				space_replace(stmt->space, stmt->new_tuple,
+					      stmt->old_tuple, DUP_INSERT);
+				trigger_run(&txn->on_rollback, stmt); /* must not throw. */
+				if (stmt->new_tuple) {
+					tuple_ref(stmt->new_tuple, -1);
+				}
+			}
+		} while ((stmt = stmt->next) != NULL);
+	}
+	fiber()->on_reschedule_callback = NULL;
+	if (txn->outer == NULL) {
+		TRASH(txn);
+		fiber_gc();
+	} else {
+		TRASH(txn);
+	}
 }

@@ -57,7 +57,6 @@ extern "C" {
 #include "lua/cjson.h"
 #include "lua/yaml.h"
 #include "lua/msgpack.h"
-#include <session.h>
 #include "lua/pickle.h"
 
 #include <ctype.h>

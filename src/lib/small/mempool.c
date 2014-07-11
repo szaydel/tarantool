@@ -27,7 +27,6 @@
  * SUCH DAMAGE.
  */
 #include "small/mempool.h"
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "small/slab_cache.h"

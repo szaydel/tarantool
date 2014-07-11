@@ -117,9 +117,9 @@ log_dir_add_to_index(struct log_dir *dir, int64_t signature)
 	int64_t signature_check = vclock_signature(&wal->vclock);
 	if (signature_check != signature) {
 		tnt_raise(ClientError, ER_INVALID_XLOG_NAME,
-			  (long long) signature_check,
-			  (long long) signature);
+			  (long long) signature_check, (long long) signature);
 	}
+
 	/*
 	 * Check ordering
 	 */
@@ -313,7 +313,7 @@ error:
 	uint32_t crc32c = mp_decode_uint(&data);
 	assert(data <= fixheader + sizeof(fixheader));
 	(void) crc32p;
-        row->flags = *data;
+	row->flags = *data;
 
 	/* Allocate memory for body */
 	char *bodybuf = (char *) region_alloc(&fiber()->gc, len);
@@ -355,7 +355,7 @@ xlog_encode_row(const struct iproto_header *row, struct iovec *iov)
 	data = mp_encode_uint(data, crc32p);
 	/* Encode crc32 for current row */
 	data = mp_encode_uint(data, crc32c);
-        *data++ = (char)row->flags;
+	*data++ = (char)row->flags;
 	/* Encode padding */
 	ssize_t padding = XLOG_FIXHEADER_SIZE - (data - fixheader);
 	if (padding > 0)
@@ -429,10 +429,10 @@ restart:
 	if (fread(&magic, sizeof(magic), 1, l->f) != 1)
 		goto eof;
 
-        while (magic != row_marker) {
-                if (subsequent) {
-                        return 1;
-                }
+	while (magic != row_marker) {
+		if (subsequent) {
+			return 1;
+		}
 		int c = fgetc(l->f);
 		if (c == EOF) {
 			say_debug("eof while looking for magic");
@@ -443,7 +443,7 @@ restart:
 	}
 	marker_offset = ftello(l->f) - sizeof(row_marker);
 	if (i->good_offset != marker_offset) {
-                if (subsequent) {
+		if (subsequent) {
                         return 1;
                 }
 		say_warn("skipped %jd bytes after 0x%08jx offset",
@@ -459,9 +459,9 @@ restart:
 		if (l->dir->panic_if_error)
 			panic("failed to read row");
 		say_warn("failed to read row");
-                if (subsequent) {
-                        return 1;
-                }
+		if (subsequent) {
+			return 1;
+		}
 		goto restart;
 	}
 

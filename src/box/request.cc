@@ -27,7 +27,6 @@
  * SUCH DAMAGE.
  */
 #include "request.h"
-#include "box.h"
 #include "txn.h"
 #include "tuple.h"
 #include "index.h"
@@ -214,7 +213,8 @@ request_create(struct request *request, uint32_t type)
 	request_check_type(type);
 	static const request_execute_f execute_map[] = {
 		NULL, execute_select, execute_replace, execute_replace,
-		execute_update, execute_delete, box_lua_call, execute_auth,
+		execute_update, execute_delete, box_lua_call,
+		execute_auth,
 	};
 	memset(request, 0, sizeof(*request));
 	request->type = type;

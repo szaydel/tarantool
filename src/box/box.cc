@@ -76,91 +76,91 @@ struct request_replace_body {
 void
 port_send_tuple(struct port *port, struct txn *txn)
 {
-        txn_stmt *stmt = txn->tail;
-        if (stmt != NULL) {
-                struct tuple *tuple;
-                if ((tuple = stmt->new_tuple) || (tuple = stmt->old_tuple))
-                        port_add_tuple(port, tuple);
-        }
+	struct txn_stmt *stmt = txn->tail;
+	if (stmt != NULL) {
+		struct tuple *tuple;
+		if ((tuple = stmt->new_tuple) || (tuple = stmt->old_tuple))
+			port_add_tuple(port, tuple);
+	}
 }
 
 static void on_fiber_reschedule()
 {
-        struct txn * txn = in_txn();
-        if (txn != NULL) {
-                // throwing exception in this place cause abnormal termination of Tarantool
+	struct txn *txn = in_txn();
+	if (txn) {
+		// throwing exception in this place cause abnormal termination of Tarantool
 		//tnt_raise(LoggedError, ER_YIELD_NOT_ALLOWED);
-                in_txn() = NULL;
-                // resetting fiber()->gc() region in rollback cause crash
-                //txn_rollback(txn);
-        }
+		in_txn() = NULL;
+		// resetting fiber()->gc() region in rollback cause crash
+		//txn_rollback(txn);
+	}
 }
 
 void
 box_begin()
 {
-        struct txn *txn = in_txn();
-        if (txn != NULL && txn->nesting_level != 0) { /* transaction statred for CALL request has nesting_level == 0 */
-                txn->nesting_level += 1;
-        } else {
-                fiber()->on_reschedule_callback = on_fiber_reschedule;
-                in_txn() = txn_begin();
-        }
+	struct txn *txn = in_txn();
+	if (txn != NULL && txn->nesting_level != 0) { /* transaction statred for CALL request has nesting_level == 0 */
+		txn->nesting_level += 1;
+	} else {
+		fiber()->on_reschedule_callback = on_fiber_reschedule;
+		in_txn() = txn_begin();
+	}
 }
 
 void
 box_commit(struct port *port)
 {
-        struct txn *txn = in_txn();
-        if (txn == NULL)
+	struct txn *txn = in_txn();
+	if (txn == NULL)
 		tnt_raise(LoggedError, ER_NO_ACTIVE_TRANSACTION);
 
-        if (--txn->nesting_level == 0)  {
-                in_txn() = NULL;
-                try {
-                        txn_commit(txn);
-                        port_eof(port);
-                        txn_finish(txn);
-                } catch (Exception *e) {
-                        txn_rollback(txn);
-                        throw;
-                }
-        }
+	if (--txn->nesting_level == 0)  {
+		in_txn() = NULL;
+		try {
+			txn_commit(txn);
+			port_eof(port);
+			txn_finish(txn);
+		} catch (Exception *e) {
+			txn_rollback(txn);
+			throw;
+		}
+	}
 }
 
 void
 box_rollback()
 {
-        struct txn *txn = in_txn();
-        if (txn == NULL)
+	struct txn *txn = in_txn();
+	if (txn == NULL)
 		tnt_raise(LoggedError, ER_NO_ACTIVE_TRANSACTION);
 
-        in_txn() = NULL;
-        txn_rollback(txn);
+	in_txn() = NULL;
+	txn_rollback(txn);
 }
 
 static void
 process_rw(struct port *port, struct request *request)
 {
-        struct txn *txn = in_txn();
-        bool autocommit = false;
-        if (txn == NULL || txn->nesting_level == 0) { /* transaction statred for CALL request has nesting_level == 0 */
-                txn = txn_begin();
-                autocommit = true;
-        }
+	struct txn *txn = in_txn();
+	bool autocommit = false;
+	if (txn == NULL || txn->nesting_level == 0) { /* transaction statred for CALL request has nesting_level == 0 */
+		txn = txn_begin();
+		autocommit = true;
+	}
 	try {
-                stat_collect(stat_base, request->type, 1);
-                request->execute(request, txn, port);
-                if (iproto_request_is_update(request->type)) {
-                        port_send_tuple(port, txn);
-                }
-                if (autocommit) {
-                        txn_commit(txn);
-                        port_eof(port);
-                        txn_finish(txn);
-                }
+		stat_collect(stat_base, request->type, 1);
+		request->execute(request, txn, port);
+		if (iproto_request_is_update(request->type)) {
+			port_send_tuple(port, txn);
+		}
+		if (autocommit) {
+			txn_commit(txn);
+			port_eof(port);
+			txn_finish(txn);
+		}
 	} catch (Exception *e) {
-                in_txn() = NULL;
+		in_txn() = NULL;
 		txn_rollback(txn);
 		throw;
 	}
@@ -177,18 +177,18 @@ process_ro(struct port *port, struct request *request)
 static void
 recover_row(void *param __attribute__((unused)), struct iproto_header *row)
 {
-        struct request request;
+	struct request request;
 	try {
 		assert(row->bodycnt == 1); /* always 1 for read */
-                if ((row->flags & (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS)) == (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS))
-                        box_begin();
+		if ((row->flags & (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS)) == (WAL_REQ_FLAG_IS_FIRST|WAL_REQ_FLAG_IN_TRANS))
+			box_begin();
 		request_create(&request, row->type);
 		request_decode(&request, (const char *) row->body[0].iov_base,
-                               row->body[0].iov_len);
+			       row->body[0].iov_len);
 		request.header = row;
 		process_rw(&null_port, &request);
-                if ((row->flags & (WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT)) == WAL_REQ_FLAG_IN_TRANS)
-                        box_commit(&null_port);
+		if ((row->flags & (WAL_REQ_FLAG_IN_TRANS|WAL_REQ_FLAG_HAS_NEXT)) == WAL_REQ_FLAG_IN_TRANS)
+			box_commit(&null_port);
 	} catch (Exception *e) {
 		e->log();
 	}
@@ -636,5 +636,5 @@ box_info(struct tbuf *out)
 const char *
 box_status(void)
 {
-    return status;
+	return status;
 }

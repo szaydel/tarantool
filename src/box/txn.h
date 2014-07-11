@@ -42,7 +42,7 @@ struct space;
  */
 struct txn_stmt {
 	/** L1-list of statements of a multi-statement transaction. */
-	txn_stmt *next;
+	struct txn_stmt *next;
 
 	/** Undo info. */
 	struct space *space;
@@ -61,9 +61,9 @@ struct txn {
 	 * Each transaction has at least one statement. This is
 	 * it, the first statement of the transaction.
 	 */
-	txn_stmt stmt;
+	struct txn_stmt stmt;
 	/** The last statement of the multi-statement transaction. */
-	txn_stmt *tail;
+	struct txn_stmt *tail;
 	int nesting_level;
 	int n_stmts;
 	/** Outer transaction */

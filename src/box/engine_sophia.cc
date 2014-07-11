@@ -175,9 +175,8 @@ SophiaFactory::keydefCheck(struct key_def *key_def)
 void
 SophiaFactory::txnFinish(struct txn *txn)
 {
-	for (txn_stmt *tr = &txn->stmt; tr != NULL; tr = tr->next) {
-		if (tr->new_tuple) {
-			tuple_ref(tr->new_tuple, -1);
-		}
+	for (struct txn_stmt *stmt = &txn->stmt; stmt; stmt = stmt->next) {
+		if (stmt->new_tuple)
+			tuple_ref(stmt->new_tuple, -1);
 	}
 }

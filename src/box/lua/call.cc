@@ -191,7 +191,6 @@ port_add_lua_multret(struct port *port, struct lua_State *L)
 
 /* }}} */
 
-
 /**
  * The main extension provided to Lua by Tarantool/Box --
  * ability to call INSERT/UPDATE/SELECT/DELETE from within
@@ -221,10 +220,10 @@ lbox_process(lua_State *L)
 		return luaL_error(L, "box.process(CALL, ...) is not allowed");
 	}
 	struct port *port_lua = port_lua_table_create(L);
-        struct request request;
-        request_create(&request, op);
-        request_decode(&request, req, sz);
-        box_process(port_lua, &request);
+	struct request request;
+	request_create(&request, op);
+	request_decode(&request, req, sz);
+	box_process(port_lua, &request);
 
 	return 1;
 }
@@ -236,9 +235,9 @@ lbox_request_create(struct lua_State *L, enum iproto_request_type type,
 	struct request *request = (struct request *)
 		region_alloc(&fiber()->gc, sizeof(struct request));
 	request_create(request, type);
-        if (lua_gettop(L) > 0) {
-                request->space_id = lua_tointeger(L, 1);
-        }
+	if (lua_gettop(L) > 0) {
+		request->space_id = lua_tointeger(L, 1);
+	}
 	if (key > 0) {
 		struct tbuf *key_buf = tbuf_new(&fiber()->gc);
 		luamp_encode(L, key_buf, key);
@@ -317,16 +316,15 @@ boxffi_select(struct port *port, uint32_t space_id, uint32_t index_id,
 	}
 }
 
-
 static int
 lbox_insert(lua_State *L)
 {
 	if (lua_gettop(L) != 2 || !lua_isnumber(L, 1))
 		return luaL_error(L, "Usage space:insert(tuple)");
 
-        struct request *request = lbox_request_create(L, IPROTO_INSERT,
-                                                      -1, 2);
-        box_process(port_lua_create(L), request);
+	struct request *request = lbox_request_create(L, IPROTO_INSERT,
+						      -1, 2);
+	box_process(port_lua_create(L), request);
 	return lua_gettop(L) - 2;
 }
 
@@ -336,9 +334,9 @@ lbox_replace(lua_State *L)
 	if (lua_gettop(L) != 2 || !lua_isnumber(L, 1))
 		return luaL_error(L, "Usage space:replace(tuple)");
 
-        struct request *request = lbox_request_create(L, IPROTO_REPLACE,
-                                                      -1, 2);
-        box_process(port_lua_create(L), request);
+	struct request *request = lbox_request_create(L, IPROTO_REPLACE,
+						      -1, 2);
+	box_process(port_lua_create(L), request);
 	return lua_gettop(L) - 2;
 }
 
@@ -348,12 +346,12 @@ lbox_update(lua_State *L)
 	if (lua_gettop(L) != 4 || !lua_isnumber(L, 1) || !lua_isnumber(L, 2))
 		return luaL_error(L, "Usage space:update(key, ops)");
 
-        struct request *request = lbox_request_create(L, IPROTO_UPDATE,
-                                                      3, 4);
+	struct request *request = lbox_request_create(L, IPROTO_UPDATE,
+						      3, 4);
 	request->field_base = 1; /* field ids are one-indexed */
-        /* Ignore index_id for now */
-        box_process(port_lua_create(L), request);
-        return lua_gettop(L) - 4;
+	/* Ignore index_id for now */
+	box_process(port_lua_create(L), request);
+	return lua_gettop(L) - 4;
 }
 
 static int
@@ -362,20 +360,20 @@ lbox_delete(lua_State *L)
 	if (lua_gettop(L) != 3 || !lua_isnumber(L, 1) || !lua_isnumber(L, 2))
 		return luaL_error(L, "Usage space:delete(key)");
 
-        struct request *request = lbox_request_create(L, IPROTO_DELETE,
-                                                      3, -1);
-        /* Ignore index_id for now */
-        box_process(port_lua_create(L), request);
-        return lua_gettop(L) - 3;
+	struct request *request = lbox_request_create(L, IPROTO_DELETE,
+						      3, -1);
+	/* Ignore index_id for now */
+	box_process(port_lua_create(L), request);
+	return lua_gettop(L) - 3;
 }
 
 
 static int
 lbox_begin(lua_State *L)
 {
-        if (lua_gettop(L) != 0) {
+	if (lua_gettop(L) != 0) {
 		return luaL_error(L, "Usage box.begin()");
-        }
+	}
 	box_begin();
 	return lua_gettop(L);
 }
@@ -383,20 +381,20 @@ lbox_begin(lua_State *L)
 static int
 lbox_commit(lua_State *L)
 {
-        if (lua_gettop(L) != 0) {
+	if (lua_gettop(L) != 0) {
 		return luaL_error(L, "Usage box.commit()");
-        }
-        box_commit(port_lua_create(L));
+	}
+	box_commit(port_lua_create(L));
 	return lua_gettop(L);
 }
 
 static int
 lbox_rollback(lua_State *L)
 {
-        if (lua_gettop(L) != 0) {
+	if (lua_gettop(L) != 0) {
 		return luaL_error(L, "Usage box.rollback()");
-        }
-        box_rollback();
+	}
+	box_rollback();
 	return lua_gettop(L);
 }
 
@@ -534,8 +532,8 @@ box_lua_call(struct request *request, struct txn *txn, struct port *port)
 	uint8_t access = PRIV_X & ~user->universal_access;
 
 	/* Lua call is not treated as a nested transaction. */
-        txn->nesting_level = 0;
-        in_txn() = txn;
+	txn->nesting_level = 0;
+	in_txn() = txn;
 
 	/* Try to find a function by name */
 	int oc = box_lua_find(L, name, name + name_len);
@@ -555,7 +553,7 @@ box_lua_call(struct request *request, struct txn *txn, struct port *port)
 		luamp_decode(L, &args);
 	}
 	lbox_call(L, arg_count + oc - 1, LUA_MULTRET);
-        in_txn() = NULL;
+	in_txn() = NULL;
 	/* Send results of the called procedure to the client. */
 	port_add_lua_multret(port, L);
 }
