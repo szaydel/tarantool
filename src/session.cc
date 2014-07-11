@@ -63,6 +63,7 @@ session_create(int fd, uint64_t cookie)
 	session->cookie = cookie;
 	session->delim[0] = '\0';
 	session->txn = NULL;
+
 	/*
 	 * At first the session user is a superuser,
 	 * to make sure triggers run correctly.
