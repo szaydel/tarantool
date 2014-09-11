@@ -71,14 +71,14 @@ schema_object_type(const char *name);
  * since there is a mismatch between enum name (STRING) and type
  * name literal ("STR"). STR is already used as Objective C type.
  */
-enum field_type { UNKNOWN = 0, NUM, STRING, field_type_MAX };
+enum field_type { UNKNOWN = 0, NUM, STRING, ARR, field_type_MAX };
 extern const char *field_type_strs[];
 
 static inline uint32_t
 field_type_maxlen(enum field_type type)
 {
 	static const uint32_t maxlen[] =
-		{ UINT32_MAX, 4, 8, UINT32_MAX, UINT32_MAX };
+		{ UINT32_MAX, 8, UINT32_MAX, UINT32_MAX, UINT32_MAX };
 	return maxlen[type];
 }
 
