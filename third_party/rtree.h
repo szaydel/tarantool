@@ -178,53 +178,6 @@ public:
 	~R_tree_iterator();
 };
 
-class R_page {
-public:
-	struct branch {
-		rectangle_t r;
-		R_page*     p;
-	};
-
-	enum {
-		card = (RTREE_PAGE_SIZE-4)/sizeof(branch), // maximal number of branches at page
-		min_fill = card/2        // minimal number of branches at non-root page
-	};
-
-	struct reinsert_list {
-		R_page* chain;
-		int     level;
-		reinsert_list() { chain = NULL; }
-	};
-
-	R_page* insert(rectangle_t const& r, record_t obj, int level);
-
-	bool remove(rectangle_t const& r, record_t obj, int level, reinsert_list& rlist);
-
-	rectangle_t cover() const;
-
-	R_page* split_page(branch const& br);
-
-	R_page* add_branch(branch const& br) {
-		if (n < card) {
-			b[n++] = br;
-			return NULL;
-		} else {
-			return split_page(br);
-		}
-	}
-	void remove_branch(int i);
-
-	void purge(int level);
-
-	R_page* next_reinsert_page() const { return (R_page*)b[card-1].p; }
-
-	R_page(rectangle_t const& rect, record_t obj);
-	R_page(R_page* old_root, R_page* new_page);
-
-	int    n; // number of branches at page
-	branch b[card];
-};
-
 class R_tree
 {
 	friend class R_tree_iterator;

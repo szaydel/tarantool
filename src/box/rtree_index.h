@@ -33,7 +33,7 @@
 
 #include <third_party/rtree.h>
 
-class RTreeIndex: public Index 
+class RTreeIndex: public Index
 {
 public:
 	RTreeIndex(struct key_def *key_def);
@@ -44,13 +44,13 @@ public:
 	virtual struct tuple *replace(struct tuple *old_tuple,
                                       struct tuple *new_tuple,
                                       enum dup_replace_mode mode);
-        
+
 	virtual size_t memsize() const;
 	virtual struct iterator *allocIterator() const;
 	virtual void initIterator(struct iterator *iterator,
                                   enum iterator_type type,
                                   const char *key, uint32_t part_count) const;
-        
+
 protected:
 	R_tree tree;
 };
