@@ -74,11 +74,11 @@ Let's list them here too:
     REQUEST:
 
     0      5
-    +------+ +------------+ +-----------------------------------+
+    +------+ +============+ +===================================+
     | BODY | |            | |                                   |
     |HEADER| |   HEADER   | |               BODY                |
     | SIZE | |            | |                                   |
-    +------+ +------------+ +-----------------------------------+
+    +------+ +============+ +===================================+
      MP_INT      MP_MAP                     MP_MAP
 
 
@@ -86,12 +86,12 @@ Let's list them here too:
 
     UNIFIED HEADER:
 
-    +----------------+----------------+
+    +================+================+
     |                |                |
     |   0x00: CODE   |   0x01: SYNC   |
     | MP_INT: MP_INT | MP_INT: MP_INT |
     |                |                |
-    +----------------+----------------+
+    +================+================+
                    MP_MAP
 
 --------------------------------------------------------------------------------
@@ -136,14 +136,14 @@ Let's list them here too:
 
     AUTHORIZATION BODY: CODE = 0x07
 
-    +------------------+------------------------------------+
+    +==================+====================================+
     |                  |        +-------------+-----------+ |
     |                  | (TUPLE)|  len == 9   | len == 20 | |
     |   0x23:USERNAME  |   0x21:| "chap-sha1" |  SCRAMBLE | |
     | MP_INT:MP_STRING | MP_INT:|  MP_STRING  | MP_STRING | |
     |                  |        +-------------+-----------+ |
     |                  |                   MP_ARRAY         |
-    +------------------+------------------------------------+
+    +==================+====================================+
                             MP_MAP
 
 
@@ -157,12 +157,12 @@ Let's list them here too:
 
     INSERT/REPLACE BODY:
 
-    +------------------+------------------+
+    +==================+==================+
     |                  |                  |
     |   0x10: SPACE_ID |   0x21: TUPLE    |
     | MP_INT: MP_INT   | MP_INT: MP_ARRAY |
     |                  |                  |
-    +------------------+------------------+
+    +==================+==================+
                      MP_MAP
 
 Find tuples matching the search pattern
@@ -174,17 +174,17 @@ Find tuples matching the search pattern
 
     SELECT BODY:
 
-    +------------------+------------------+------------------+
+    +==================+==================+==================+
     |                  |                  |                  |
     |   0x10: SPACE_ID |   0x11: INDEX_ID |   0x12: LIMIT    |
     | MP_INT: MP_INT   | MP_INT: MP_INT   | MP_INT: MP_INT   |
     |                  |                  |                  |
-    +------------------+------------------+------------------+
+    +==================+==================+==================+
     |                  |                  |                  |
     |   0x13: OFFSET   |   0x14: ITERATOR |   0x14: KEY      |
     | MP_INT: MP_INT   | MP_INT: MP_INT   | MP_INT: MP_ARRAY |
     |                  |                  |                  |
-    +------------------+------------------+------------------+
+    +==================+==================+==================+
                               MP_MAP
 
 .. code-block:: lua
@@ -192,12 +192,12 @@ Find tuples matching the search pattern
     Delete a tuple
     DELETE BODY:
 
-    +------------------+------------------+------------------+
+    +==================+==================+==================+
     |                  |                  |                  |
     |   0x10: SPACE_ID |   0x11: INDEX_ID |   0x14: KEY      |
     | MP_INT: MP_INT   | MP_INT: MP_INT   | MP_INT: MP_ARRAY |
     |                  |                  |                  |
-    +------------------+------------------+------------------+
+    +==================+==================+==================+
                               MP_MAP
 
 .. code-block:: lua
@@ -205,16 +205,15 @@ Find tuples matching the search pattern
     Update a tuple
     UPDATE BODY:
 
-    +------------------+------------------+------------------+------------------+
-    |                  |                  |                  | (TUPLE)          |
-    |   0x10: SPACE_ID |   0x11: INDEX_ID |   0x14: KEY      |   0x21: OP_LIST  |
-    | MP_INT: MP_INT   | MP_INT: MP_INT   | MP_INT: MP_ARRAY | MP_INT: MP_ARRAY |
-    |                  |                  |                  |                  |
-    +------------------+------------------+------------------+------------------+
+    +==================+==================+==================+=======================+
+    |                  |                  |                  |          +~~~~~~~~~~+ |
+    |                  |                  |                  |          |          | |
+    |                  |                  |                  | (TUPLE)  |    OP    | |
+    |   0x10: SPACE_ID |   0x11: INDEX_ID |   0x14: KEY      |    0x21: |          | |
+    | MP_INT: MP_INT   | MP_INT: MP_INT   | MP_INT: MP_ARRAY |  MP_INT: +~~~~~~~~~~+ |
+    |                  |                  |                  |            MP_ARRAY   |
+    +==================+==================+==================+=======================+
                                        MP_MAP
-
-    OP_LIST:
-        MP_ARRAY of OP (At lease one).
 
     OP:
         Works only for INTEGERS
@@ -226,12 +225,12 @@ Find tuples matching the search pattern
         * Delete      OP = '#'
           delete <argument> fields starting from <field_no> in the space[<key>]
 
-    +-----------+----------+----------+
+    +-----------+==========+==========+
     |           |          |          |
     |    OP     | FIELD_NO | ARGUMENT |
     | MP_FIXSTR |  MP_INT  |  MP_INT  |
     |           |          |          |
-    +-----------+----------+----------+
+    +-----------+==========+==========+
                   MP_ARRAY
 
         * Insert      OP = '!'
@@ -240,24 +239,24 @@ Find tuples matching the search pattern
           assign <argument> to field <field_no>.
           will extend the tuple if <field_no> == <max_field_no> + 1
 
-    +-----------+----------+-----------+
+    +-----------+==========+===========+
     |           |          |           |
     |    OP     | FIELD_NO | ARGUMENT  |
     | MP_FIXSTR |  MP_INT  | MP_OBJECT |
     |           |          |           |
-    +-----------+----------+-----------+
+    +-----------+==========+===========+
                   MP_ARRAY
 
         * Splice      OP = ':'
           take the string from space[key][field_no] and
           substitute <offset> bytes from <position> with <argument>
 
-    +-----------+----------+----------+--------+----------+
+    +-----------+==========+==========+========+==========+
     |           |          |          |        |          |
     |    ':'    | FIELD_NO | POSITION | OFFSET | ARGUMENT |
     | MP_FIXSTR |  MP_INT  |  MP_INT  | MP_INT |  MP_STR  |
     |           |          |          |        |          |
-    +-----------+----------+----------+--------+----------+
+    +-----------+==========+==========+========+==========+
                              MP_ARRAY
 
 .. code-block:: lua
@@ -265,12 +264,12 @@ Find tuples matching the search pattern
     Call a stored function
     CALL BODY:
 
-    +-----------------------+------------------+
+    +=======================+==================+
     |                       |                  |
     |   0x22: FUNCTION_NAME |   0x21: TUPLE    |
     | MP_INT: MP_STRING     | MP_INT: MP_ARRAY |
     |                       |                  |
-    +-----------------------+------------------+
+    +=======================+==================+
                         MP_MAP
 
 --------------------------------------------------------------------------------
@@ -284,23 +283,23 @@ Find tuples matching the search pattern
     OK:    LEN + HEADER + BODY
 
     0      5                                          OPTIONAL
-    +------++----------------+----------------++-------------------+
+    +------++================+================++===================+
     |      ||                |                ||                   |
     | BODY ||   0x00: 0x00   |   0x01: SYNC   ||   0x30: DATA      |
     |HEADER|| MP_INT: MP_INT | MP_INT: MP_INT || MP_INT: MP_OBJECT |
     | SIZE ||                |                ||                   |
-    +------++----------------+----------------++-------------------+
+    +------++================+================++===================+
      MP_INT                MP_MAP                      MP_MAP
 
     ERROR: LEN + HEADER + BODY
 
     0      5
-    +------++----------------+----------------++-------------------+
+    +------++================+================++===================+
     |      ||                |                ||                   |
     | BODY ||   0x00: 0x8XXX |   0x01: SYNC   ||   0x31: ERROR     |
     |HEADER|| MP_INT: MP_INT | MP_INT: MP_INT || MP_INT: MP_STRING |
     | SIZE ||                |                ||                   |
-    +------++----------------+----------------++-------------------+
+    +------++================+================++===================+
      MP_INT                MP_MAP                      MP_MAP
 
     Where 0xXXX is ERRCODE.
@@ -332,26 +331,26 @@ Find tuples matching the search pattern
 
     In the beggining you must send JOIN
                              HEADER                          BODY
-    +----------------+----------------+-------------------++-------+
+    +================+================+===================++-------+
     |                |                |    SERVER_UUID    ||       |
     |   0x00: 0x41   |   0x01: SYNC   |   0x24: UUID      || EMPTY |
     | MP_INT: MP_INT | MP_INT: MP_INT | MP_INT: MP_STRING ||       |
     |                |                |                   ||       |
-    +----------------+----------------+-------------------++-------+
+    +================+================+===================++-------+
                    MP_MAP                                   MP_MAP
 
     Then server, which we connect to, will send last SNAP file by, simply,
     creating a number of INSERT's (with additional LSN and ServerID) (don't reply)
     Then it'll send a vclock's MP_MAP and close a socket.
 
-    +----------------+----------------++------------------------------------+
-    |                |                ||        +-----------------+-------+ |
-    |                |                ||        |                 |       | |
-    |   0x00: 0x00   |   0x01: SYNC   ||   0x26:| SRV_ID: SRV_LSN |  ...  | |
-    | MP_INT: MP_INT | MP_INT: MP_INT || MP_INT:| MP_INT: MP_INT  |       | |
-    |                |                ||        +-----------------+-------+ |
-    |                |                ||                   MP_MAP           |
-    +----------------+----------------++------------------------------------+
+    +================+================++============================+
+    |                |                ||        +~~~~~~~~~~~~~~~~~+ |
+    |                |                ||        |                 | |
+    |   0x00: 0x00   |   0x01: SYNC   ||   0x26:| SRV_ID: SRV_LSN | |
+    | MP_INT: MP_INT | MP_INT: MP_INT || MP_INT:| MP_INT: MP_INT  | |
+    |                |                ||        +~~~~~~~~~~~~~~~~~+ |
+    |                |                ||                   MP_MAP   |
+    +================+================++============================+
                    MP_MAP                      MP_MAP
 
     SUBSCRIBE:
@@ -359,20 +358,20 @@ Find tuples matching the search pattern
     Then you must send SUBSCRIBE:
 
                                   HEADER
-    +----------------+----------------+-------------------+-------------------+
+    +================+================+===================+===================+
     |                |                |    SERVER_UUID    |    CLUSTER_UUID   |
     |   0x00: 0x41   |   0x01: SYNC   |   0x24: UUID      |   0x25: UUID      |
     | MP_INT: MP_INT | MP_INT: MP_INT | MP_INT: MP_STRING | MP_INT: MP_STRING |
     |                |                |                   |                   |
-    +----------------+----------------+-------------------+-------------------+
+    +================+================+===================+===================+
                                     MP_MAP
           BODY
-    +----------------+
+    +================+
     |                |
     |   0x26: VCLOCK |
     | MP_INT: MP_INT |
     |                |
-    +----------------+
+    +================+
           MP_MAP
 
     Then you must process every query that'll came through other masters.
@@ -403,14 +402,22 @@ So, **Header** of SNAP/XLOG consists from:
     VClock: <vclock_map>\n
     \n
 
-Then it'll continues with marker of tuples beggining: 0xd5ba0bab. End of file must be marked with 0xd510aded. In the middle of this marks there's simply a number of simple tarantool requests. With the default schema:
+
+There're two markers: tuple beggining - **0xd5ba0bab** and EOF marker - **0xd510aded**. So, next, between **Header** and EOF marker there's data with such schema:
 
 .. code-block:: lua
 
-    0      5
-    +------+ +------------+ +-----------------------------------+
-    | BODY | |            | |                                   |
-    |HEADER| |   HEADER   | |               BODY                |
-    | SIZE | |            | |                                   |
-    +------+ +------------+ +-----------------------------------+
-     MP_INT      MP_MAP                     MP_MAP
+    0            3 4                                         17
+    +-------------+========+============+===========+=========+
+    |             |        |            |           |         |
+    | 0xd5ba0bab  | LENGTH | CRC32 PREV | CRC32 CUR | PADDING |
+    |             |        |            |           |         |
+    +-------------+========+============+===========+=========+
+      MP_FIXEXT2    MP_INT     MP_INT       MP_INT      ---
+
+    +============+ +===================================+
+    |            | |                                   |
+    |   HEADER   | |                BODY               |
+    |            | |                                   |
+    +============+ +===================================+
+        MP_MAP                     MP_MAP
