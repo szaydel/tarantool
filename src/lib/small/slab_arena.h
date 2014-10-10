@@ -38,7 +38,7 @@ extern "C" {
 
 enum {
 	/* Smallest possible slab size. */
-	SLAB_MIN_SIZE = USHRT_MAX,
+	SLAB_MIN_SIZE = USHRT_MAX + 1,
 	/** The largest allowed amount of memory of a single arena. */
        SMALL_UNLIMITED = SIZE_MAX/2 + 1
 };
@@ -59,6 +59,22 @@ struct slab_arena {
 	struct lf_lifo cache;
 	/** A preallocated arena of size = prealloc. */
 	void *arena;
+	/**
+	 * How much memory is preallocated during initialization
+	 * of slab_arena.
+	 */
+	size_t prealloc;
+	/**
+	 * How much memory in the preallocated arena has
+	 * already been initialized for slabs.
+	 * @invariant used <= prealloc.
+	 */
+	size_t used;
+	/**
+	 * An external quota to which we must adhere.
+	 * A quota exists to set a common limit on two arenas.
+	 */
+	struct quota *quota;
 	/*
 	 * Each object returned by arena_map() has this size.
 	 * The size is provided at arena initialization.
@@ -76,25 +92,6 @@ struct slab_arena {
 	 */
 	uint32_t slab_size;
 	/**
-	 * How much memory is preallocated during initialization
-	 * of slab_arena.
-	 */
-	size_t prealloc;
-	/**
-	 * How much above 'prealloc' size we can go after
-	 * the arena is exhausted (arena_used == prealloc).
-	 * Each new slab is allocated by a dedicated mmap()
-	 * call. When returned, slabs allocated this way
-	 * are munmap()-ed right away.
-	 */
-	size_t maxalloc;
-	/**
-	 * How much memory in the preallocated arena has
-	 * already been initialized for slabs.
-	 * @invariant arena_used <= prealloc.
-	 */
-	size_t used;
-	/**
 	 * mmap() flags: MAP_SHARED or MAP_PRIVATE
 	 */
 	int flags;
@@ -102,8 +99,8 @@ struct slab_arena {
 
 /** Initialize an arena.  */
 int
-slab_arena_create(struct slab_arena *arena, size_t prealloc,
-		  size_t maxalloc, uint32_t slab_size, int flags);
+slab_arena_create(struct slab_arena *arena, struct quota *quota,
+		  size_t prealloc, uint32_t slab_size, int flags);
 
 /** Destroy an arena. */
 void
