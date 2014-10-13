@@ -183,6 +183,11 @@ s:close()
 
 os.remove('/tmp/tarantool-test-socket')
 
+-- timeouts
+{ socket.getaddrinfo('mail.ru', 80) ~= nil, errno() == 0 }
+{ socket.getaddrinfo('mail.ru', 80, 0.000000001) == nil, errno() == errno.ETIMEDOUT }
+{ socket.getaddrinfo('mail.ru', 80, 0) == nil, errno() == errno.ETIMEDOUT }
+
 --# setopt delimiter ';'
 function aexitst(ai, host, port)
     for i, a in pairs(ai) do
@@ -506,3 +511,4 @@ socket.getaddrinfo('host', 'port', { type = 'WRONG' }) == nil and errno() == err
 socket.getaddrinfo('host', 'port', { family = 'WRONG' }) == nil and errno() == errno.EINVAL
 socket.getaddrinfo('host', 'port', { protocol = 'WRONG' }) == nil and errno() == errno.EINVAL
 socket.getaddrinfo('host', 'port', { flags = 'WRONG' }) == nil and errno() == errno.EINVAL
+

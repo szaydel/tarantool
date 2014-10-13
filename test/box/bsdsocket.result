@@ -589,6 +589,22 @@ os.remove('/tmp/tarantool-test-socket')
 ---
 - true
 ...
+-- timeouts
+{ socket.getaddrinfo('mail.ru', 80) ~= nil, errno() == 0 }
+---
+- - true
+  - true
+...
+{ socket.getaddrinfo('mail.ru', 80, 0.000000001) == nil, errno() == errno.ETIMEDOUT }
+---
+- - true
+  - true
+...
+{ socket.getaddrinfo('mail.ru', 80, 0) == nil, errno() == errno.ETIMEDOUT }
+---
+- - true
+  - true
+...
 --# setopt delimiter ';'
 function aexitst(ai, host, port)
     for i, a in pairs(ai) do

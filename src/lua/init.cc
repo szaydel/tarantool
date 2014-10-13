@@ -96,13 +96,13 @@ static const char *lua_modules[] = {
 	"log", log_lua,
 	"uri", uri_lua,
 	"fio", fio_lua,
+	"fiber.timeout", fiber_timeout_lua,
 	"socket", bsdsocket_lua,
 	"net.box", box_net_box_lua,
 	"console", console_lua,
 	"tap", tap_lua,
 	"help.en_US", help_en_US_lua,
 	"help", help_lua,
-	"fiber.timeout", fiber_timeout_lua,
 	NULL
 };
 

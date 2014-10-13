@@ -653,41 +653,39 @@ lbox_bsdsocket_push_addr(struct lua_State *L,
 static int
 lbox_bsdsocket_getaddrinfo(struct lua_State *L)
 {
-	assert(lua_gettop(L) == 4);
+	assert(lua_gettop(L) == 3);
 	lua_pushvalue(L, 1);
 	const char *host = lua_tostring(L, -1);
 	lua_pushvalue(L, 2);
 	const char *port = lua_tostring(L, -1);
 
-	ev_tstamp timeout = lua_tonumber(L, 3);
-
 	struct addrinfo hints, *result = NULL;
 	memset(&hints, 0, sizeof(hints));
 
-	if (lua_istable(L, 4)) {
-		lua_getfield(L, 4, "family");
+	if (lua_istable(L, 3)) {
+		lua_getfield(L, 3, "family");
 		if (lua_isnumber(L, -1))
 			hints.ai_family = lua_tointeger(L, -1);
 		lua_pop(L, 1);
 
-		lua_getfield(L, 4, "type");
+		lua_getfield(L, 3, "type");
 		if (lua_isnumber(L, -1))
 			hints.ai_socktype = lua_tointeger(L, -1);
 		lua_pop(L, 1);
 
-		lua_getfield(L, 4, "protocol");
+		lua_getfield(L, 3, "protocol");
 		if (lua_isnumber(L, -1))
 			hints.ai_protocol = lua_tointeger(L, -1);
 		lua_pop(L, 1);
 
-		lua_getfield(L, 4, "flags");
+		lua_getfield(L, 3, "flags");
 		if (lua_isnumber(L, -1))
 			hints.ai_flags = lua_tointeger(L, -1);
 		lua_pop(L, 1);
 	}
 
 	int res_errno = 0;
-	int dns_res = coeio_custom(bsdsocket_getaddrinfo_cb, timeout,
+	int dns_res = coeio_custom(bsdsocket_getaddrinfo_cb, TIMEOUT_INFINITY,
 				   host, port, &hints, &result, &res_errno);
 	lua_pop(L, 2);	/* host, port */
 

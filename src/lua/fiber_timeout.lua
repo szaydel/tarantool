@@ -20,6 +20,7 @@
 
 local fiber = require 'fiber'
 local log   = require 'log'
+local errno = require 'errno'
 
 local function timeout(timeout, foo, ...)
 
@@ -59,6 +60,7 @@ local function timeout(timeout, foo, ...)
 
     -- timeout
     if res == nil then
+        errno(errno.ETIMEDOUT)
         return false
     end
 

@@ -1,13 +1,13 @@
 -- bsdsocket.lua (internal file)
 
 local TIMEOUT_INFINITY      = 500 * 365 * 86400
-
 local ffi = require('ffi')
 local boxerrno = require('errno')
 local internal = require('socket')
 local fiber = require('fiber')
 local fio = require('fio')
 local log = require('log')
+local timeout_wrapper = require('fiber.timeout')
 
 ffi.cdef[[
     struct socket {
@@ -851,7 +851,14 @@ local function getaddrinfo(host, port, timeout, opts)
         end
 
     end
-    return internal.getaddrinfo(host, port, timeout, ga_opts)
+   
+    local ok, res =
+        timeout_wrapper(timeout, internal.getaddrinfo, host, port, ga_opts)
+
+    if not ok then
+        return nil
+    end
+    return res
 end
 
 local soname_mt = {
