@@ -30,6 +30,7 @@ lua_source(lua_sources lua/help.lua)
 lua_source(lua_sources lua/help_en_US.lua)
 lua_source(lua_sources lua/tap.lua)
 lua_source(lua_sources lua/fio.lua)
+lua_source(lua_sources lua/fiber_timeout.lua)
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/third_party/luafun)
 lua_source(lua_sources ../third_party/luafun/fun.lua)
 
