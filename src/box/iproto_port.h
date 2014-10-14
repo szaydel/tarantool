@@ -80,10 +80,6 @@ iproto_port_init(struct iproto_port *port, struct obuf *buf,
 	port->size = 0;
 }
 
-/** Stack a reply to 'ping' packet. */
-void
-iproto_reply_ping(struct obuf *out, uint64_t sync);
-
 /** Send an error packet back. */
 void
 iproto_reply_error(struct obuf *out, const ClientError *e, uint64_t sync);

@@ -69,15 +69,6 @@ iproto_encode_error(uint32_t error)
 }
 
 void
-iproto_reply_ping(struct obuf *out, uint64_t sync)
-{
-	struct iproto_header_bin reply = iproto_header_bin;
-	reply.v_len = mp_bswap_u32(sizeof(iproto_header_bin) - 5);
-	reply.v_sync = mp_bswap_u64(sync);
-	obuf_dup(out, &reply, sizeof(reply));
-}
-
-void
 iproto_reply_error(struct obuf *out, const ClientError *e, uint64_t sync)
 {
 	uint32_t msg_len = strlen(e->errmsg());

@@ -168,11 +168,11 @@ pong = s:sysread()
 ...
 string.len(pong)
 ---
-- 22
+- 29
 ...
 msgpack.decode(pong)
 ---
-- 17
+- 24
 - 6
 ...
 msgpack.decode(pong, 6)

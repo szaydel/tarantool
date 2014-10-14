@@ -98,10 +98,7 @@ static void
 iproto_process_disconnect(struct iproto_request *request);
 
 static void
-iproto_process_dml(struct iproto_request *request);
-
-static void
-iproto_process_admin(struct iproto_request *request);
+iproto_process_request(struct iproto_request *request);
 
 struct IprotoRequestGuard {
 	struct iproto_request *ireq;
@@ -484,7 +481,7 @@ iproto_enqueue_batch(struct iproto_connection *con, struct ibuf *in)
 		if (reqend > in->end)
 			break;
 		struct iproto_request *ireq =
-			iproto_request_new(con, iproto_process_dml);
+			iproto_request_new(con, iproto_process_request);
 		IprotoRequestGuard guard(ireq);
 
 		xrow_header_decode(&ireq->header, &pos, reqend);
@@ -495,17 +492,15 @@ iproto_enqueue_batch(struct iproto_connection *con, struct ibuf *in)
 		 * as well as in->pos must not be advanced, to
 		 * stay in sync.
 		 */
+		request_create(&ireq->request, ireq->header.type);
 		if (iproto_type_is_dml(ireq->header.type)) {
 			if (ireq->header.bodycnt == 0) {
 				tnt_raise(ClientError, ER_INVALID_MSGPACK,
 					  "request type");
 			}
-			request_create(&ireq->request, ireq->header.type);
 			pos = (const char *) ireq->header.body[0].iov_base;
 			request_decode(&ireq->request, pos,
 				       ireq->header.body[0].iov_len);
-		} else {
-			ireq->process = iproto_process_admin;
 		}
 		ireq->request.header = &ireq->header;
 		iproto_queue_push(&request_queue, guard.release());
@@ -645,7 +640,7 @@ iproto_connection_on_output(ev_loop *loop, struct ev_io *watcher,
 /* {{{ iproto_process_* functions */
 
 static void
-iproto_process_dml(struct iproto_request *ireq)
+iproto_process_request(struct iproto_request *ireq)
 {
 	struct iobuf *iobuf = ireq->iobuf;
 	struct iproto_connection *con = ireq->connection;
@@ -673,59 +668,19 @@ iproto_process_dml(struct iproto_request *ireq)
 	iproto_port_init(&port, out, ireq->header.sync);
 	try {
 		box_process((struct port *) &port, &ireq->request);
+		if (unlikely(ireq->header.type == IPROTO_JOIN ||
+			     ireq->header.type == IPROTO_SUBSCRIBE)) {
+			/*
+			 * JOIN/SUBSCRIBE performed in a fork => close
+			 * connection iproto here.
+			 * TODO: check requests in `con' queue
+			 */
+			iproto_connection_shutdown(con);
+		}
 	} catch (ClientError *e) {
 		if (port.found)
 			obuf_rollback_to_svp(out, &port.svp);
 		iproto_reply_error(out, e, ireq->header.sync);
-	}
-}
-
-static void
-iproto_process_admin(struct iproto_request *ireq)
-{
-	struct iobuf *iobuf = ireq->iobuf;
-	struct iproto_connection *con = ireq->connection;
-
-	auto scope_guard = make_scoped_guard([=]{
-		/* Discard request (see iproto_enqueue_batch()) */
-		iobuf->in.pos += ireq->total_len;
-
-		if (evio_is_active(&con->output)) {
-			if (! ev_is_active(&con->output))
-				ev_feed_event(con->loop,
-					      &con->output,
-					      EV_WRITE);
-		} else if (iproto_connection_is_idle(con)) {
-			iproto_connection_delete(con);
-		}
-	});
-
-	if (unlikely(! evio_is_active(&con->output)))
-		return;
-
-	try {
-		switch (ireq->header.type) {
-		case IPROTO_PING:
-			iproto_reply_ping(&ireq->iobuf->out,
-					  ireq->header.sync);
-			break;
-		case IPROTO_JOIN:
-			replication_join(con->input.fd, &ireq->header);
-			/* TODO: check requests in `con; queue */
-			iproto_connection_shutdown(con);
-			return;
-		case IPROTO_SUBSCRIBE:
-			replication_subscribe(con->input.fd, &ireq->header);
-			/* TODO: check requests in `con; queue */
-			iproto_connection_shutdown(con);
-			return;
-		default:
-			tnt_raise(ClientError, ER_UNKNOWN_REQUEST_TYPE,
-				   (uint32_t) ireq->header.type);
-		}
-	} catch (ClientError *e) {
-		say_error("admin command error: %s", e->errmsg());
-		iproto_reply_error(&iobuf->out, e, ireq->header.sync);
 	}
 }
 

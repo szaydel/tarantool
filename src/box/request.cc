@@ -40,6 +40,7 @@
 #include <third_party/base64.h>
 #include "authentication.h"
 #include "access.h"
+#include "replication.h"
 
 enum dup_replace_mode
 dup_replace_mode(uint32_t op)
@@ -169,18 +170,54 @@ execute_auth(struct request *request, struct port * /* port */)
 	authenticate(user, len, request->tuple, request->tuple_end);
 }
 
+void
+execute_ping(struct request *request, struct port *port)
+{
+	(void) request;
+	(void) port;
+}
+
+void
+execute_join(struct request *request, struct port *port)
+{
+	(void) port;
+	struct session *session = session();
+	replication_join(session->fd, request->header);
+}
+
+void
+execute_subscribe(struct request *request, struct port *port)
+{
+	(void) port;
+	struct session *session = session();
+	replication_subscribe(session->fd, request->header);
+}
+
 /** }}} */
+
+static const request_execute_f execute_map[] = {
+	NULL, execute_select, execute_replace, execute_replace,
+	execute_update, execute_delete, box_lua_call,
+	execute_auth, NULL,  NULL,
+	/* 10..19 */
+	NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL, NULL,  NULL,  NULL,
+	/* 20..29 */
+	NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL, NULL,  NULL,  NULL,
+	/* 30..39 */
+	NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL, NULL,  NULL,  NULL,
+	/* 40..49 */
+	NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL, NULL,  NULL,  NULL,
+	/* 50..59 */
+	NULL,  NULL,  NULL,  NULL,  NULL,  NULL,  NULL, NULL,  NULL,  NULL,
+	/* 60..69 */
+	NULL,  NULL,  NULL,  NULL, execute_ping, execute_join, execute_subscribe,
+};
 
 void
 request_create(struct request *request, uint32_t type)
 {
-	if (!iproto_type_is_dml(type))
+	if (type >= IPROTO_TYPE_ADMIN_MAX || execute_map[type] == NULL)
 		tnt_raise(LoggedError, ER_UNKNOWN_REQUEST_TYPE, type);
-	static const request_execute_f execute_map[] = {
-		NULL, execute_select, execute_replace, execute_replace,
-		execute_update, execute_delete, box_lua_call,
-		execute_auth,
-	};
 	memset(request, 0, sizeof(*request));
 	request->type = type;
 	request->execute = execute_map[type];
