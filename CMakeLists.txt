@@ -126,6 +126,7 @@ set(CMAKE_REQUIRED_LIBRARIES "")
 check_function_exists(clock_gettime HAVE_CLOCK_GETTIME_WITHOUT_RT)
 
 check_symbol_exists(__get_cpuid cpuid.h HAVE_CPUID)
+check_symbol_exists(strlcpy string.h HAVE_STRLCPY)
 
 # Checks for libev
 include(CheckStructHasMember)
@@ -157,12 +158,43 @@ add_custom_target(ctags DEPENDS tags)
 #
 # Enable 'make luacheck' target.
 #
-
-add_custom_target(luacheck)
+# The code looks tricky, because of luacheck side problems
+# (see [1]).
+#
+# The following circumstances may lead to missing of source files
+# or exclusions:
+#
+# * Calling `luacheck "${dir}/.luacheckrc" "${dir}"` from
+#   outside of ${dir} or when ${dir} is not a real path.
+# * Using of a path with symlink components in --exclude-files.
+#
+# We should exclude the build directory (when it is inside the
+# source tree), at least because it contains LuaJIT's generated
+# files and the temporary directory for testing (test/var).
+#
+# .luacheckrc provides corresponding exclusion rules for the
+# in-source build case (`cmake .`).
+#
+# [1]: https://github.com/mpeterv/luacheck/issues/208
+#
+set(EXCLUDE_FILES)
+get_filename_component(BINARY_REALPATH "${PROJECT_BINARY_DIR}" REALPATH)
+get_filename_component(SOURCE_REALPATH "${PROJECT_SOURCE_DIR}" REALPATH)
+file_is_in_directory(BINARY_DIR_INSIDE_SOURCE_DIR "${BINARY_REALPATH}"
+                     "${SOURCE_REALPATH}")
+if (BINARY_DIR_INSIDE_SOURCE_DIR)
+    set(EXCLUDE_FILES --exclude-files "${BINARY_REALPATH}/**/*.lua")
+endif()
+add_custom_target(luacheck DEPENDS LuaJIT-luacheck)
 add_custom_command(TARGET luacheck
-    COMMAND ${LUACHECK} --codes --config "${PROJECT_SOURCE_DIR}/.luacheckrc" "${PROJECT_SOURCE_DIR}"
+    COMMAND ${LUACHECK} --codes --config .luacheckrc . ${EXCLUDE_FILES}
+    WORKING_DIRECTORY ${SOURCE_REALPATH}
     COMMENT "Perform static analysis of Lua code"
 )
+unset(BINARY_REALPATH)
+unset(SOURCE_REALPATH)
+unset(BINARY_DIR_INSIDE_SOURCE_DIR)
+unset(EXCLUDE_FILES)
 
 if (WITH_JEPSEN)
     ExternalProject_Add(
@@ -251,10 +283,10 @@ find_package_message(TARANTOOL_VERSION
 include_directories(${PROJECT_SOURCE_DIR}/src)
 include_directories(${PROJECT_BINARY_DIR}/src)
 include_directories(${PROJECT_SOURCE_DIR}/src/lib)
-include_directories(${PROJECT_SOURCE_DIR}/src/lib/small)
+include_directories(${PROJECT_SOURCE_DIR}/src/lib/small/include)
 include_directories(${PROJECT_SOURCE_DIR}/src/lib/small/third_party)
 include_directories(${PROJECT_SOURCE_DIR}/src/lib/core)
-include_directories(${PROJECT_SOURCE_DIR})
+include_directories(${PROJECT_SOURCE_DIR}/third_party)
 
 #
 # Specify Tarantool modules prefixes
@@ -395,6 +427,30 @@ else()
     set(CURL_FIND_REQUIRED ON)
     find_package(CURL)
 endif()
+
+#
+# XXhash
+#
+include(BuildLibXXhash)
+libxxhash_build()
+add_dependencies(build_bundled_libs xxhash)
+
+# Install headers.
+if (ENABLE_BUNDLED_LIBCURL)
+    install(DIRECTORY "${CURL_INCLUDE_DIRS}/curl"
+            DESTINATION ${MODULE_FULL_INCLUDEDIR}
+            FILES_MATCHING PATTERN "*.h")
+endif()
+
+#
+# Export libcurl symbols if the library is linked statically.
+#
+if (ENABLE_BUNDLED_LIBCURL OR BUILD_STATIC)
+    set(EXPORT_LIBCURL_SYMBOLS ON)
+else()
+    set(EXPORT_LIBCURL_SYMBOLS OFF)
+endif()
+message(STATUS "EXPORT_LIBCURL_SYMBOLS: ${EXPORT_LIBCURL_SYMBOLS}")
 
 #
 # ReadLine
@@ -607,7 +663,7 @@ set(PREFIX ${CMAKE_INSTALL_PREFIX})
 set(options PACKAGE VERSION BUILD C_COMPILER CXX_COMPILER C_FLAGS CXX_FLAGS
     PREFIX
     ENABLE_SSE2 ENABLE_AVX
-    ENABLE_GCOV ENABLE_GPROF ENABLE_VALGRIND ENABLE_ASAN ENABLE_UB_SANITIZER
+    ENABLE_GCOV ENABLE_GPROF ENABLE_VALGRIND ENABLE_ASAN ENABLE_UB_SANITIZER ENABLE_FUZZER
     ENABLE_BACKTRACE
     ENABLE_DOC
     ENABLE_DIST

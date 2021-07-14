@@ -39,6 +39,7 @@
 #include <unistd.h>
 #include <inttypes.h>
 #include <assert.h>
+#include <stdbool.h>
 
 #if defined(__cplusplus)
 extern "C" {
@@ -450,6 +451,21 @@ fpconv_strtod(const char *nptr, char **endptr)
 	return strtod(nptr, endptr);
 }
 
+#ifndef HAVE_STRLCPY
+/**
+ * Copy string. Unlike @a strncpy the result string
+ * is always null-terminated.
+ *
+ * @param dst destination buffer.
+ * @param src source string.
+ * @param size destination buffer size.
+ *
+ * @return size of @a src string.
+ */
+size_t
+strlcpy(char *dst, const char *src, size_t size);
+#endif
+
 /**
  * Check that @a str is valid utf-8 sequence and can be printed
  * unescaped.
@@ -546,6 +562,12 @@ cmp_i64(const void *_a, const void *_b)
 {
 	const int64_t *a = (const int64_t *) _a, *b = (const int64_t *) _b;
 	return COMPARE_RESULT(*a, *b);
+}
+
+static inline bool
+is_exp_of_two(unsigned n)
+{
+	return (n & (n - 1)) == 0;
 }
 
 /**

@@ -1,24 +1,24 @@
 #!/usr/bin/env tarantool
 
-function none(old_space, new_space)
+local function none(old_space, new_space) -- luacheck: ignore
 end
 
-function trigger_replace(old_space, new_space)
+local function trigger_replace(old_space, new_space) -- luacheck: ignore
     box.space.temp:replace({1})
     box.space.loc:replace({1})
 end
 
-function trigger_insert(old_space, new_space)
+local function trigger_insert(old_space, new_space) -- luacheck: ignore
     box.space.temp:insert({1})
     box.space.loc:insert({1})
 end
 
-function trigger_upsert(old_space, new_space)
+local function trigger_upsert(old_space, new_space) -- luacheck: ignore
     box.space.temp:upsert({1}, {{'=', 1, 4}})
     box.space.loc:upsert({1}, {{'=', 1, 4}})
 end
 
-trigger = nil
+local trigger = nil
 
 if arg[1] == 'none' then
     trigger = none
@@ -32,13 +32,15 @@ end
 
 if arg[2] == 'is_recovery_finished' then
     box.ctl.on_schema_init(function()
-        if box.ctl.is_recovery_finished() then
-            box.space._user:on_replace(trigger)
-        end
+        box.space._index:on_replace(function(old_space, new_space)
+            if box.ctl.is_recovery_finished() then
+                trigger(old_space, new_space)
+            end
+        end)
     end)
 else
     box.ctl.on_schema_init(function()
-        box.space._user:on_replace(trigger)
+        box.space._index:on_replace(trigger)
     end)
 end
 

@@ -282,7 +282,7 @@ box.schema.user.exists{}
 box.schema.func.exists('nosuchfunc')
 box.schema.func.exists('guest')
 box.schema.func.exists(1)
-box.schema.func.exists(68)
+box.schema.func.exists(69)
 box.schema.func.exists('box.schema.user.info')
 box.schema.func.exists()
 box.schema.func.exists(nil)
@@ -824,3 +824,18 @@ box.schema.user.grant('guest', 'read,write,execute', 'space', 'not_universe')
 box.schema.user.revoke('guest', 'read,write,execute', 'universe')
 box.schema.user.revoke('guest', 'read,write,execute', 'space', 'not_universe')
 sp:drop()
+
+--
+-- Make sure that the functions "LUA" and "box.schema.user.info" do not have
+-- excess rights.
+--
+_ = box.schema.func.call("LUA", "return 1")
+_ = box.schema.func.call("LUA", "return box.space._space:count()")
+_ = box.schema.func.call("box.schema.user.info", 0)
+_ = box.schema.func.call("box.schema.user.info", 1)
+session.su('guest')
+_ = box.schema.func.call("LUA", "return 1")
+_ = box.schema.func.call("LUA", "return box.space._space:count()")
+_ = box.schema.func.call("box.schema.user.info", 0)
+_ = box.schema.func.call("box.schema.user.info", 1)
+session.su('admin')

@@ -1,11 +1,12 @@
 #!/usr/bin/env tarantool
 
+local ffi = require('ffi')
 local fio = require('fio')
 
 box.cfg{log = "tarantool.log"}
 -- Use BUILDDIR passed from test-run or cwd when run w/o
 -- test-run to find test/app-tap/module_api.{so,dylib}.
-build_path = os.getenv("BUILDDIR") or '.'
+local build_path = os.getenv("BUILDDIR") or '.'
 package.cpath = fio.pathjoin(build_path, 'test/app-tap/?.so'   ) .. ';' ..
                 fio.pathjoin(build_path, 'test/app-tap/?.dylib') .. ';' ..
                 package.cpath
@@ -17,10 +18,10 @@ local function test_pushcdata(test, module)
     local gc_counter = 0;
     local ct = ffi.typeof('struct module_api_test')
     ffi.metatype(ct, {
-        __tostring = function(obj)
+        __tostring = function()
             return 'ok'
         end;
-        __gc = function(obj)
+        __gc = function()
             gc_counter = gc_counter + 1;
         end
     })
@@ -33,27 +34,26 @@ local function test_pushcdata(test, module)
     test:is(ctid, ctid2, 'checkcdata type')
     test:is(ptr, ptr2, 'checkcdata value')
     test:is(gc_counter, 0, 'pushcdata gc')
-    obj = nil
+    obj = nil -- luacheck: no unused
     collectgarbage('collect')
     test:is(gc_counter, 1, 'pushcdata gc')
 end
 
 local function test_buffers(test, module)
-    test:plan(9)
-    local ffi = require('ffi')
+    test:plan(8)
     local buffer = require('buffer')
 
-    local bufalloc = buffer.static_alloc("char", 128)
+    local bufalloc = ffi.new('char[?]', 128)
     local ibuf = buffer.ibuf()
     local pbuf = ibuf:alloc(128)
+    local ibuf_ptr = ffi.cast('struct ibuf *', ibuf)
 
     test:ok(not module.toibuf(nil), 'toibuf of nil')
     test:ok(not module.toibuf({}), 'toibuf of {}')
     test:ok(not module.toibuf(1LL), 'toibuf of 1LL')
     test:ok(not module.toibuf(box.NULL), 'toibuf of box.NULL')
-    test:ok(not module.toibuf(buffer.reg1), 'toibuf of reg1')
     test:ok(not module.toibuf(bufalloc), 'toibuf of allocated buffer')
-    test:ok(module.toibuf(buffer.IBUF_SHARED), "toibuf of ibuf*")
+    test:ok(module.toibuf(ibuf_ptr), "toibuf of ibuf*")
     test:ok(module.toibuf(ibuf), 'toibuf of ibuf')
     test:ok(not module.toibuf(pbuf), 'toibuf of pointer to ibuf data')
 end
@@ -222,7 +222,7 @@ local function test_iscdata(test, module)
     end
 end
 
-local test = require('tap').test("module_api", function(test)
+require('tap').test("module_api", function(test)
     test:plan(38)
     local status, module = pcall(require, 'module_api')
     test:is(status, true, "module")
@@ -244,7 +244,7 @@ local test = require('tap').test("module_api", function(test)
         end
     end
 
-    local status, msg = pcall(module.check_error)
+    local _, msg = pcall(module.check_error)
     test:like(msg, 'luaT_error', 'luaT_error')
 
     test:test("pushcdata", test_pushcdata, module)

@@ -116,7 +116,8 @@ space:insert{'1', 'hello', 'world'}
 ...
 space:insert{'2', 'hello', 'world'}
 ---
-- error: Duplicate key exists in unique index 'minmax' in space 'tweedledum'
+- error: Duplicate key exists in unique index "minmax" in space "tweedledum" with
+    old tuple - ["1", "hello", "world"] and new tuple - ["2", "hello", "world"]
 ...
 space:drop()
 ---
@@ -625,7 +626,7 @@ space = box.schema.space.create('tweedledum')
 tmp = space:create_index('primary', { type = 'tree', parts = {1, 'unsigned'}, unique = true })
 ---
 ...
-dofile('push.lua')
+push_collection = require('push')
 ---
 ...
 push_collection(space, 0, 1038784, 'hello')
@@ -752,7 +753,7 @@ space:drop()
 --
 -- index:random test
 -- 
-dofile('index_random_test.lua')
+index_random_test = require('index_random_test')
 ---
 ...
 space = box.schema.space.create('tweedledum')

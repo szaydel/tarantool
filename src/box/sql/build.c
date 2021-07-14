@@ -45,6 +45,7 @@
  */
 #include <ctype.h>
 #include "sqlInt.h"
+#include "mem.h"
 #include "vdbeInt.h"
 #include "tarantoolInt.h"
 #include "box/ck_constraint.h"
@@ -2576,6 +2577,7 @@ index_fill_def(struct Parse *parse, struct index *index,
 		part->type = space_def->fields[fieldno].type;
 		part->nullable_action = space_def->fields[fieldno].nullable_action;
 		part->is_nullable = part->nullable_action == ON_CONFLICT_ACTION_NONE;
+		part->exclude_null = false;
 		part->sort_order = SORT_ORDER_ASC;
 		part->coll_id = coll_id;
 		part->path = NULL;

@@ -1,8 +1,10 @@
 std = "luajit"
-globals = {"box", "_TARANTOOL", "tonumber64"}
+globals = {"box", "_TARANTOOL", "tonumber64", "utf8"}
 ignore = {
     -- Accessing an undefined field of a global variable <debug>.
     "143/debug",
+    -- Accessing an undefined field of a global variable <os>.
+    "143/os",
     -- Accessing an undefined field of a global variable <string>.
     "143/string",
     -- Accessing an undefined field of a global variable <table>.
@@ -28,26 +30,18 @@ include_files = {
 
 exclude_files = {
     "build/**/*.lua",
-    -- Third-party source code.
-    "test-run/**/*.lua",
-    "test/app/**/*.lua",
-    "test/app-tap/**/*.lua",
-    "test/box/**/*.lua",
-    "test/box-py/**/*.lua",
-    "test/box-tap/**/*.lua",
-    "test/engine/**/*.lua",
-    "test/engine_long/**/*.lua",
-    "test/long_run-py/**/*.lua",
-    "test/luajit-tap/**/*.lua",
-    "test/replication/**/*.lua",
-    "test/replication-py/**/*.lua",
+    "test-run/test/test-tarantool/*.test.lua",
+    "test/app/*.test.lua",
+    "test/box/*.test.lua",
+    "test/engine/*.test.lua",
+    "test/engine_long/*.test.lua",
+    "test/replication/*.test.lua",
     "test/sql/**/*.lua",
-    "test/swim/**/*.lua",
+    "test/swim/*.test.lua",
     "test/var/**/*.lua",
-    "test/vinyl/**/*.lua",
-    "test/wal_off/**/*.lua",
-    "test/xlog/**/*.lua",
-    "test/xlog-py/**/*.lua",
+    "test/vinyl/*.test.lua",
+    "test/wal_off/*.test.lua",
+    "test/xlog/*.test.lua",
     "third_party/**/*.lua",
     ".rocks/**/*.lua",
     ".git/**/*.lua",
@@ -55,35 +49,8 @@ exclude_files = {
 
 files["test/sql-tap/**/*.lua"] = {
     ignore = {
-        -- Accessing an undefined global variable.
-        "113",
-        -- Unused local variable.
-        "211",
-        -- Unused argument.
-        "212",
-        -- Unused loop variable.
-        "213",
-        -- Local variable is set but never accessed.
-        "231",
-        -- "Value assigned to a local variable is unused."
-        "311",
-        -- Unreachable code.
-        "511",
-        -- Loop can be executed at most once.
-        "512",
-        -- An empty if branch.
-        "542",
-        -- A line consists of nothing but whitespace.
-        "611",
-        -- A line contains trailing whitespace.
-        "612",
-        -- Trailing whitespace in a string.
-        "613",
-        -- Trailing whitespace in a comment.
-        "614",
-        -- Inconsistent indentation (SPACE followed by TAB).
-        "621",
         -- Line is too long.
+        -- https://github.com/tarantool/tarantool/issues/5181
         "631"
     }
 }
@@ -101,4 +68,50 @@ files["src/box/lua/console.lua"] = {
         -- https://github.com/tarantool/tarantool/issues/5032
         "212",
     }
+}
+files["test/box/box.lua"] = {
+    globals = {
+        "cfg_filter",
+        "sorted",
+        "iproto_request",
+    }
+}
+files["test/box/gh-5645-several-iproto-threads.lua"] = {
+    globals = {
+        "errinj_set",
+        "ping",
+    },
+}
+files["test/box-tap/session.test.lua"] = {
+    globals = {
+        "session",
+        "space",
+        "f1",
+        "f2",
+    },
+}
+files["test/box-tap/extended_error.test.lua"] = {
+    globals = {
+        "error_access_denied",
+        "error_new",
+        "error_new_stacked",
+        "error_throw",
+        "error_throw_stacked",
+        "error_throw_access_denied",
+        "forbidden_function",
+    },
+}
+files["test/swim/box.lua"] = {
+    globals = {
+        "listen_port",
+        "listen_uri",
+        "uuid",
+        "uri",
+    }
+}
+files["test/replication/replica_quorum.lua"] = {
+    globals = {
+        "INSTANCE_URI",
+        "nonexistent_uri",
+    },
 }

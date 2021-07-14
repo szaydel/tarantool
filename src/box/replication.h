@@ -190,6 +190,14 @@ extern struct tt_uuid REPLICASET_UUID;
 
 typedef rb_tree(struct replica) replica_hash_t;
 
+/** Ack which is passed to on ack triggers. */
+struct replication_ack {
+	/** Replica ID of the ACK source. */
+	uint32_t source;
+	/** Confirmed vclock. */
+	const struct vclock *vclock;
+};
+
 /**
  * Replica set state.
  *
@@ -271,6 +279,8 @@ struct replicaset {
 		/* Shared applier diagnostic area. */
 		struct diag diag;
 	} applier;
+	/** Triggers are invoked on each ACK from each replica. */
+	struct rlist on_ack;
 	/** Map of all known replica_id's to correspponding replica's. */
 	struct replica *replica_by_id[VCLOCK_MAX];
 };
@@ -321,6 +331,11 @@ struct replica {
 	 * separate from applier.
 	 */
 	enum applier_state applier_sync_state;
+	/**
+	 * Applier's last written to WAL transaction timestamp.
+	 * Needed for relay lagging statistics.
+	 */
+	double applier_txn_last_tm;
 	/* The latch is used to order replication requests. */
 	struct latch order_latch;
 };
@@ -346,10 +361,11 @@ struct replica *
 replica_by_id(uint32_t replica_id);
 
 /**
- * Return the replica set leader.
+ * Find a node in the replicaset on which the instance can try to register to
+ * join the replicaset.
  */
 struct replica *
-replicaset_leader(void);
+replicaset_find_join_master(void);
 
 struct replica *
 replicaset_first(void);

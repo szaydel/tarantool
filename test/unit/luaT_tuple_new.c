@@ -25,8 +25,6 @@
  * box/tuple.test.lua.
  */
 
-extern struct ibuf *tarantool_lua_ibuf;
-
 uint32_t
 min_u32(uint32_t a, uint32_t b)
 {
@@ -120,6 +118,7 @@ test_basic(struct lua_State *L)
 	part.coll_id = COLL_NONE;
 	part.is_nullable = false;
 	part.nullable_action = ON_CONFLICT_ACTION_DEFAULT;
+	part.exclude_null = false;
 	part.sort_order = SORT_ORDER_ASC;
 	part.path = NULL;
 	struct key_def *key_def = key_def_new(&part, 1, false);
@@ -182,8 +181,6 @@ main()
 {
 	memory_init();
 	fiber_init(fiber_c_invoke);
-
-	ibuf_create(tarantool_lua_ibuf, &cord()->slabc, 16000);
 
 	struct lua_State *L = luaL_newstate();
 	luaL_openlibs(L);

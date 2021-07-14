@@ -150,7 +150,7 @@ memtx_engine_shutdown(struct engine *engine)
 
 static int
 memtx_engine_recover_snapshot_row(struct memtx_engine *memtx,
-				  struct xrow_header *row);
+				  struct xrow_header *row, int *is_space_system);
 
 int
 memtx_engine_recover_snapshot(struct memtx_engine *memtx,
@@ -170,12 +170,19 @@ memtx_engine_recover_snapshot(struct memtx_engine *memtx,
 	int rc;
 	struct xrow_header row;
 	uint64_t row_count = 0;
-	while ((rc = xlog_cursor_next(&cursor, &row,
-				      memtx->force_recovery)) == 0) {
+	int is_space_system = -1;
+	bool force_recovery = false;
+	/*
+	 * In case when we read system space, we can't ignore errors.
+	 */
+	while ((rc = xlog_cursor_next(&cursor, &row, force_recovery)) == 0) {
 		row.lsn = signature;
-		rc = memtx_engine_recover_snapshot_row(memtx, &row);
+		rc = memtx_engine_recover_snapshot_row(memtx, &row,
+						       &is_space_system);
+		force_recovery = is_space_system == 0 ?
+				 memtx->force_recovery : false;
 		if (rc < 0) {
-			if (!memtx->force_recovery)
+			if (!force_recovery)
 				break;
 			say_error("can't apply row: ");
 			diag_log();
@@ -188,7 +195,7 @@ memtx_engine_recover_snapshot(struct memtx_engine *memtx,
 		}
 	}
 	xlog_cursor_close(&cursor, false);
-	if (rc < 0)
+	if (rc < 0 || is_space_system < 0)
 		return -1;
 
 	/**
@@ -196,8 +203,12 @@ memtx_engine_recover_snapshot(struct memtx_engine *memtx,
 	 * marker - such snapshots are very likely corrupted and
 	 * should not be trusted.
 	 */
-	if (!xlog_cursor_is_eof(&cursor))
-		panic("snapshot `%s' has no EOF marker", filename);
+	if (!xlog_cursor_is_eof(&cursor)) {
+		if (!memtx->force_recovery)
+			panic("snapshot `%s' has no EOF marker", cursor.name);
+		else
+			say_error("snapshot `%s' has no EOF marker", cursor.name);
+	}
 
 	return 0;
 }
@@ -216,7 +227,7 @@ memtx_engine_recover_raft(const struct xrow_header *row)
 
 static int
 memtx_engine_recover_snapshot_row(struct memtx_engine *memtx,
-				  struct xrow_header *row)
+				  struct xrow_header *row, int *is_space_system)
 {
 	assert(row->bodycnt == 1); /* always 1 for read */
 	if (row->type != IPROTO_INSERT) {
@@ -230,6 +241,7 @@ memtx_engine_recover_snapshot_row(struct memtx_engine *memtx,
 	struct request request;
 	if (xrow_decode_dml(row, &request, dml_request_key_map(row->type)) != 0)
 		return -1;
+	*is_space_system = (request.space_id < BOX_SYSTEM_ID_MAX);
 	struct space *space = space_cache_find(request.space_id);
 	if (space == NULL)
 		return -1;
@@ -241,7 +253,7 @@ memtx_engine_recover_snapshot_row(struct memtx_engine *memtx,
 	struct txn *txn = txn_begin();
 	if (txn == NULL)
 		return -1;
-	if (txn_begin_stmt(txn, space) != 0)
+	if (txn_begin_stmt(txn, space, request.type) != 0)
 		goto rollback;
 	/* no access checks here - applier always works with admin privs */
 	struct tuple *unused;
@@ -253,7 +265,7 @@ memtx_engine_recover_snapshot_row(struct memtx_engine *memtx,
 	 * Snapshot rows are confirmed by definition. They don't need to go to
 	 * the synchronous transactions limbo.
 	 */
-	txn_set_flag(txn, TXN_FORCE_ASYNC);
+	txn_set_flags(txn, TXN_FORCE_ASYNC);
 	rc = txn_commit(txn);
 	/*
 	 * Don't let gc pool grow too much. Yet to
@@ -265,7 +277,7 @@ memtx_engine_recover_snapshot_row(struct memtx_engine *memtx,
 rollback_stmt:
 	txn_rollback_stmt(txn);
 rollback:
-	txn_rollback(txn);
+	txn_abort(txn);
 	fiber_gc();
 	return -1;
 }
@@ -303,7 +315,7 @@ memtx_engine_begin_final_recovery(struct engine *engine)
 	/* End of the fast path: loaded the primary key. */
 	space_foreach(memtx_end_build_primary_key, memtx);
 
-	if (!memtx->force_recovery) {
+	if (!memtx->force_recovery && !memtx_tx_manager_use_mvcc_engine) {
 		/*
 		 * Fast start path: "play out" WAL
 		 * records using the primary key only,
@@ -397,6 +409,10 @@ memtx_engine_rollback_statement(struct engine *engine, struct txn *txn,
 	if (stmt->old_tuple == NULL && stmt->new_tuple == NULL)
 		return;
 	struct space *space = stmt->space;
+	if (space == NULL) {
+		/* The space was deleted. Nothing to rollback. */
+		return;
+	}
 	struct memtx_space *memtx_space = (struct memtx_space *)space;
 	uint32_t index_count;
 
@@ -419,7 +435,7 @@ memtx_engine_rollback_statement(struct engine *engine, struct txn *txn,
 		struct index *index = space->index[i];
 		/* Rollback must not fail. */
 		if (index_replace(index, stmt->new_tuple, stmt->old_tuple,
-				  DUP_INSERT, &unused) != 0) {
+				  DUP_INSERT, &unused, &unused) != 0) {
 			diag_log();
 			unreachable();
 			panic("failed to rollback change");
@@ -448,10 +464,10 @@ memtx_engine_bootstrap(struct engine *engine)
 				sizeof(bootstrap_bin), "bootstrap") < 0)
 		return -1;
 
-	int rc;
+	int rc, is_space_system;
 	struct xrow_header row;
 	while ((rc = xlog_cursor_next(&cursor, &row, true)) == 0) {
-		rc = memtx_engine_recover_snapshot_row(memtx, &row);
+		rc = memtx_engine_recover_snapshot_row(memtx, &row, &is_space_system);
 		if (rc < 0)
 			break;
 	}
@@ -747,6 +763,7 @@ static void
 memtx_engine_commit_checkpoint(struct engine *engine,
 			       const struct vclock *vclock)
 {
+	ERROR_INJECT_TERMINATE(ERRINJ_SNAP_COMMIT_FAIL);
 	(void) vclock;
 	struct memtx_engine *memtx = (struct memtx_engine *)engine;
 
@@ -943,6 +960,7 @@ memtx_engine_join(struct engine *engine, void *arg, struct xstream *stream)
 	memtx->replica_join_cord = &cord;
 	int res = cord_cojoin(&cord);
 	memtx->replica_join_cord = NULL;
+	xstream_reset(stream);
 	return res;
 }
 
@@ -1052,7 +1070,7 @@ memtx_engine_gc_f(va_list va)
 struct memtx_engine *
 memtx_engine_new(const char *snap_dirname, bool force_recovery,
 		 uint64_t tuple_arena_max_size, uint32_t objsize_min,
-		 bool dontdump, float alloc_factor)
+		 bool dontdump, unsigned granularity, float alloc_factor)
 {
 	struct memtx_engine *memtx = calloc(1, sizeof(*memtx));
 	if (memtx == NULL) {
@@ -1104,13 +1122,27 @@ memtx_engine_new(const char *snap_dirname, bool force_recovery,
 	if (objsize_min < OBJSIZE_MIN)
 		objsize_min = OBJSIZE_MIN;
 
+	if (alloc_factor > 2) {
+		say_error("Alloc factor must be less than or equal to 2.0. It "
+			  "will be reduced to 2.0");
+		alloc_factor = 2.0;
+	} else if (alloc_factor <= 1.0) {
+		say_error("Alloc factor must be greater than 1.0. It will be "
+			  "increased to 1.001");
+		alloc_factor = 1.001;
+	}
+
 	/* Initialize tuple allocator. */
 	quota_init(&memtx->quota, tuple_arena_max_size);
 	tuple_arena_create(&memtx->arena, &memtx->quota, tuple_arena_max_size,
 			   SLAB_SIZE, dontdump, "memtx");
 	slab_cache_create(&memtx->slab_cache, &memtx->arena);
+	float actual_alloc_factor;
 	small_alloc_create(&memtx->alloc, &memtx->slab_cache,
-			   objsize_min, alloc_factor);
+			   objsize_min, granularity, alloc_factor,
+			   &actual_alloc_factor);
+	say_info("Actual slab_alloc_factor calculated on the basis of desired "
+		 "slab_alloc_factor = %f", actual_alloc_factor);
 
 	/* Initialize index extent allocator. */
 	slab_cache_create(&memtx->index_slab_cache, &memtx->arena);
@@ -1428,6 +1460,8 @@ memtx_index_def_change_requires_rebuild(struct index *index,
 		if (json_path_cmp(old_part->path, old_part->path_len,
 				  new_part->path, new_part->path_len,
 				  TUPLE_INDEX_BASE) != 0)
+			return true;
+		if (old_part->exclude_null != new_part->exclude_null)
 			return true;
 	}
 	assert(old_cmp_def->is_multikey == new_cmp_def->is_multikey);

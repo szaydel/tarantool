@@ -68,11 +68,8 @@ lbox_cfg_load(struct lua_State *L)
 static int
 lbox_cfg_set_listen(struct lua_State *L)
 {
-	try {
-		box_listen();
-	} catch (Exception *) {
+	if (box_listen() != 0)
 		luaT_error(L);
-	}
 	return 0;
 }
 
@@ -161,6 +158,22 @@ lbox_cfg_set_checkpoint_wal_threshold(struct lua_State *L)
 	} catch (Exception *) {
 		luaT_error(L);
 	}
+	return 0;
+}
+
+static int
+lbox_cfg_set_wal_queue_max_size(struct lua_State *L)
+{
+	if (box_set_wal_queue_max_size() != 0)
+		luaT_error(L);
+	return 0;
+}
+
+static int
+lbox_cfg_set_wal_cleanup_delay(struct lua_State *L)
+{
+	if (box_set_wal_cleanup_delay() < 0)
+		luaT_error(L);
 	return 0;
 }
 
@@ -375,6 +388,14 @@ lbox_cfg_set_replication_skip_conflict(struct lua_State *L)
 	return 0;
 }
 
+static int
+lbox_cfg_set_crash(struct lua_State *L)
+{
+	if (box_set_crash() != 0)
+		luaT_error(L);
+	return 0;
+}
+
 void
 box_lua_cfg_init(struct lua_State *L)
 {
@@ -391,6 +412,8 @@ box_lua_cfg_init(struct lua_State *L)
 		{"cfg_set_checkpoint_count", lbox_cfg_set_checkpoint_count},
 		{"cfg_set_checkpoint_interval", lbox_cfg_set_checkpoint_interval},
 		{"cfg_set_checkpoint_wal_threshold", lbox_cfg_set_checkpoint_wal_threshold},
+		{"cfg_set_wal_queue_max_size", lbox_cfg_set_wal_queue_max_size},
+		{"cfg_set_wal_cleanup_delay", lbox_cfg_set_wal_cleanup_delay},
 		{"cfg_set_read_only", lbox_cfg_set_read_only},
 		{"cfg_set_memtx_memory", lbox_cfg_set_memtx_memory},
 		{"cfg_set_memtx_max_tuple_size", lbox_cfg_set_memtx_max_tuple_size},
@@ -411,6 +434,7 @@ box_lua_cfg_init(struct lua_State *L)
 		{"cfg_set_replication_anon", lbox_cfg_set_replication_anon},
 		{"cfg_set_net_msg_max", lbox_cfg_set_net_msg_max},
 		{"cfg_set_sql_cache_size", lbox_set_prepared_stmt_cache_size},
+		{"cfg_set_crash", lbox_cfg_set_crash},
 		{NULL, NULL}
 	};
 

@@ -703,7 +703,7 @@ box.schema.func.exists(1)
 ---
 - true
 ...
-box.schema.func.exists(68)
+box.schema.func.exists(69)
 ---
 - false
 ...
@@ -2139,5 +2139,41 @@ box.schema.user.revoke('guest', 'read,write,execute', 'space', 'not_universe')
 ---
 ...
 sp:drop()
+---
+...
+--
+-- Make sure that the functions "LUA" and "box.schema.user.info" do not have
+-- excess rights.
+--
+_ = box.schema.func.call("LUA", "return 1")
+---
+...
+_ = box.schema.func.call("LUA", "return box.space._space:count()")
+---
+...
+_ = box.schema.func.call("box.schema.user.info", 0)
+---
+...
+_ = box.schema.func.call("box.schema.user.info", 1)
+---
+...
+session.su('guest')
+---
+...
+_ = box.schema.func.call("LUA", "return 1")
+---
+...
+_ = box.schema.func.call("LUA", "return box.space._space:count()")
+---
+- error: Read access to space '_space' is denied for user 'guest'
+...
+_ = box.schema.func.call("box.schema.user.info", 0)
+---
+...
+_ = box.schema.func.call("box.schema.user.info", 1)
+---
+- error: User '1' is not found
+...
+session.su('admin')
 ---
 ...

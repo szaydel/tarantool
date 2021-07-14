@@ -38,6 +38,7 @@
 #include "txn.h"
 #include "rmean.h"
 #include "info/info.h"
+#include "memtx_tx.h"
 
 /* {{{ Utilities. **********************************************/
 
@@ -239,13 +240,14 @@ box_index_get(uint32_t space_id, uint32_t index_id, const char *key,
 		return -1;
 	/* Start transaction in the engine. */
 	struct txn *txn;
-	if (txn_begin_ro_stmt(space, &txn) != 0)
+	struct txn_ro_savepoint svp;
+	if (txn_begin_ro_stmt(space, &txn, &svp) != 0)
 		return -1;
 	if (index_get(index, key, part_count, result) != 0) {
 		txn_rollback_stmt(txn);
 		return -1;
 	}
-	txn_commit_ro_stmt(txn);
+	txn_commit_ro_stmt(txn, &svp);
 	/* Count statistics. */
 	rmean_collect(rmean_box, IPROTO_SELECT, 1);
 	if (*result != NULL)
@@ -273,13 +275,14 @@ box_index_min(uint32_t space_id, uint32_t index_id, const char *key,
 		return -1;
 	/* Start transaction in the engine. */
 	struct txn *txn;
-	if (txn_begin_ro_stmt(space, &txn) != 0)
+	struct txn_ro_savepoint svp;
+	if (txn_begin_ro_stmt(space, &txn, &svp) != 0)
 		return -1;
 	if (index_min(index, key, part_count, result) != 0) {
 		txn_rollback_stmt(txn);
 		return -1;
 	}
-	txn_commit_ro_stmt(txn);
+	txn_commit_ro_stmt(txn, &svp);
 	if (*result != NULL)
 		tuple_bless(*result);
 	return 0;
@@ -305,13 +308,14 @@ box_index_max(uint32_t space_id, uint32_t index_id, const char *key,
 		return -1;
 	/* Start transaction in the engine. */
 	struct txn *txn;
-	if (txn_begin_ro_stmt(space, &txn) != 0)
+	struct txn_ro_savepoint svp;
+	if (txn_begin_ro_stmt(space, &txn, &svp) != 0)
 		return -1;
 	if (index_max(index, key, part_count, result) != 0) {
 		txn_rollback_stmt(txn);
 		return -1;
 	}
-	txn_commit_ro_stmt(txn);
+	txn_commit_ro_stmt(txn, &svp);
 	if (*result != NULL)
 		tuple_bless(*result);
 	return 0;
@@ -338,14 +342,15 @@ box_index_count(uint32_t space_id, uint32_t index_id, int type,
 		return -1;
 	/* Start transaction in the engine. */
 	struct txn *txn;
-	if (txn_begin_ro_stmt(space, &txn) != 0)
+	struct txn_ro_savepoint svp;
+	if (txn_begin_ro_stmt(space, &txn, &svp) != 0)
 		return -1;
 	ssize_t count = index_count(index, itype, key, part_count);
 	if (count < 0) {
 		txn_rollback_stmt(txn);
 		return -1;
 	}
-	txn_commit_ro_stmt(txn);
+	txn_commit_ro_stmt(txn, &svp);
 	return count;
 }
 
@@ -374,7 +379,8 @@ box_index_iterator(uint32_t space_id, uint32_t index_id, int type,
 	if (key_validate(index->def, itype, key, part_count))
 		return NULL;
 	struct txn *txn;
-	if (txn_begin_ro_stmt(space, &txn) != 0)
+	struct txn_ro_savepoint svp;
+	if (txn_begin_ro_stmt(space, &txn, &svp) != 0)
 		return NULL;
 	struct iterator *it = index_create_iterator(index, itype,
 						    key, part_count);
@@ -382,7 +388,7 @@ box_index_iterator(uint32_t space_id, uint32_t index_id, int type,
 		txn_rollback_stmt(txn);
 		return NULL;
 	}
-	txn_commit_ro_stmt(txn);
+	txn_commit_ro_stmt(txn, &svp);
 	rmean_collect(rmean_box, IPROTO_SELECT, 1);
 	return it;
 }
@@ -490,6 +496,11 @@ index_create(struct index *index, struct engine *engine,
 	index->def = def;
 	index->refs = 1;
 	index->space_cache_version = space_cache_version;
+	static uint32_t unique_id = 0;
+	index->unique_id = unique_id++;
+	/* Unusable until set to proper value during space creation. */
+	index->dense_id = UINT32_MAX;
+	rlist_create(&index->nearby_gaps);
 	return 0;
 }
 
@@ -503,6 +514,7 @@ index_delete(struct index *index)
 	 * the index is primary or secondary.
 	 */
 	struct index_def *def = index->def;
+	memtx_tx_on_index_delete(index);
 	index->vtab->destroy(index);
 	index_def_delete(def);
 }
@@ -547,6 +559,23 @@ index_build(struct index *index, struct index *pk)
 
 	index_end_build(index);
 	return 0;
+}
+
+struct tuple *
+index_filter_tuple_slow(struct index *index, struct tuple *tuple)
+{
+	if (tuple == NULL)
+		return tuple;
+	struct key_def* key_def = index->def->key_def;
+	struct key_part* parts = key_def->parts;
+	for (uint32_t i = 0; i < key_def->part_count; ++i) {
+		if (!parts[i].exclude_null)
+			continue;
+		const char* field = tuple_field(tuple, parts[i].fieldno);
+		if (field != NULL && mp_typeof(*field) == MP_NIL)
+			return NULL;
+	}
+	return tuple;
 }
 
 /* }}} */
@@ -671,12 +700,13 @@ generic_index_get(struct index *index, const char *key,
 int
 generic_index_replace(struct index *index, struct tuple *old_tuple,
 		      struct tuple *new_tuple, enum dup_replace_mode mode,
-		      struct tuple **result)
+		      struct tuple **result, struct tuple **successor)
 {
 	(void)old_tuple;
 	(void)new_tuple;
 	(void)mode;
 	(void)result;
+	(void)successor;
 	diag_set(UnsupportedIndexFeature, index->def, "replace()");
 	return -1;
 }
@@ -740,7 +770,7 @@ generic_index_build_next(struct index *index, struct tuple *tuple)
 	 */
 	if (index_reserve(index, 0) != 0)
 		return -1;
-	return index_replace(index, NULL, tuple, DUP_INSERT, &unused);
+	return index_replace(index, NULL, tuple, DUP_INSERT, &unused, &unused);
 }
 
 void
@@ -758,11 +788,12 @@ disabled_index_build_next(struct index *index, struct tuple *tuple)
 int
 disabled_index_replace(struct index *index, struct tuple *old_tuple,
 		       struct tuple *new_tuple, enum dup_replace_mode mode,
-		       struct tuple **result)
+		       struct tuple **result, struct tuple **successor)
 {
 	(void) old_tuple; (void) new_tuple; (void) mode;
 	(void) index;
 	*result = NULL;
+	*successor = NULL;
 	return 0;
 }
 

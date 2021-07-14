@@ -1,3 +1,9 @@
+fiber = require('fiber')
+---
+...
+swim = require('swim')
+---
+...
 test_run = require('test_run').new()
 ---
 ...
@@ -480,6 +486,15 @@ s1:member_by_uuid(50)
 ---
 - error: 'builtin/swim.lua:<line>: swim:member_by_uuid: expected string UUID or struct
     tt_uuid'
+...
+-- gh-5951: could crash with no arguments or NULL.
+s1:member_by_uuid()
+---
+- null
+...
+s1:member_by_uuid(box.NULL)
+---
+- null
 ...
 s1:member_by_uuid(uuid(2))
 ---

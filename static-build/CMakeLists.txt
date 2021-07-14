@@ -8,11 +8,20 @@ cmake_minimum_required(VERSION 2.8)
 project(tarantool-static C CXX)
 
 include(ExternalProject)
+set(LIBICU_VERSION release-62-1/icu4c-62_1)
+set(LIBICU_HASH 490ad9d920158e0314e10ba74ae9a150)
+set(LIBICONV_VERSION 1.16)
+set(LIBICONV_HASH 7d2a800b952942bb2880efb00cfd524c)
 set(OPENSSL_VERSION 1.1.1f)
+set(OPENSSL_HASH 3f486f2f4435ef14b81814dbbc7b48bb)
 set(ZLIB_VERSION 1.2.11)
+set(ZLIB_HASH 1c9f62f0778697a09d36121ead88e08e)
 set(NCURSES_VERSION 6.2)
+set(NCURSES_HASH e812da327b1c2214ac1aed440ea3ae8d)
 set(READLINE_VERSION 8.0)
+set(READLINE_HASH 7e6c1f16aee3244a69aba6e438295ca3)
 set(UNWIND_VERSION 1.3-rc1)
+set(UNWIND_HASH f09b670de5db6430a3de666e6aed60e3)
 
 # Pass -isysroot=<SDK_PATH> option on Mac OS to a preprocessor and a C
 # compiler to find header files installed with an SDK.
@@ -40,6 +49,7 @@ endif()
 #
 ExternalProject_Add(openssl
     URL https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz
+    URL_MD5 ${OPENSSL_HASH}
     CONFIGURE_COMMAND <SOURCE_DIR>/config
         CC=${CMAKE_C_COMPILER}
         CXX=${CMAKE_CXX_COMPILER}
@@ -57,7 +67,8 @@ ExternalProject_Add(openssl
 # ICU
 #
 ExternalProject_Add(icu
-    URL https://github.com/unicode-org/icu/releases/download/release-62-1/icu4c-62_1-src.tgz
+    URL https://github.com/unicode-org/icu/releases/download/${LIBICU_VERSION}-src.tgz
+    URL_MD5 ${LIBICU_HASH}
     # By default libicu is built by using clang/clang++ compiler (if it
     # exists). Here is a link for detecting compilers at libicu configure
     # script: https://github.com/unicode-org/icu/blob/7c7b8bd5702310b972f888299169bc3cc88bf0a6/icu4c/source/configure.ac#L135
@@ -84,6 +95,7 @@ ExternalProject_Add(icu
 #
 ExternalProject_Add(zlib
     URL https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz
+    URL_MD5 ${ZLIB_HASH}
     CONFIGURE_COMMAND env
         CC=${CMAKE_C_COMPILER}
         CFLAGS=${DEPENDENCY_CFLAGS}
@@ -99,6 +111,7 @@ ExternalProject_Add(zlib
 #
 ExternalProject_Add(ncurses
     URL https://ftp.gnu.org/gnu/ncurses/ncurses-${NCURSES_VERSION}.tar.gz
+    URL_MD5 ${NCURSES_HASH}
     CONFIGURE_COMMAND <SOURCE_DIR>/configure
         CC=${CMAKE_C_COMPILER}
         CXX=${CMAKE_CXX_COMPILER}
@@ -132,6 +145,7 @@ ExternalProject_Add(ncurses
 #
 ExternalProject_Add(readline
     URL https://ftp.gnu.org/gnu/readline/readline-${READLINE_VERSION}.tar.gz
+    URL_MD5 ${READLINE_HASH}
     CONFIGURE_COMMAND <SOURCE_DIR>/configure
         CC=${CMAKE_C_COMPILER}
         CFLAGS=${DEPENDENCY_CFLAGS}
@@ -147,7 +161,8 @@ ExternalProject_Add(readline
 #
 if (APPLE)
     ExternalProject_Add(iconv
-        URL https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.16.tar.gz
+        URL https://ftp.gnu.org/pub/gnu/libiconv/libiconv-${LIBICONV_VERSION}.tar.gz
+        URL_MD5 ${LIBICONV_HASH}
         CONFIGURE_COMMAND <SOURCE_DIR>/configure
             CC=${CMAKE_C_COMPILER}
             CFLAGS=${DEPENDENCY_CFLAGS}
@@ -241,6 +256,7 @@ if (APPLE)
 else()
     ExternalProject_Add(unwind
         URL https://download.savannah.nongnu.org/releases/libunwind/libunwind-${UNWIND_VERSION}.tar.gz
+        URL_MD5 ${UNWIND_HASH}
         CONFIGURE_COMMAND <SOURCE_DIR>/configure
             CC=${CMAKE_C_COMPILER}
             CXX=${CMAKE_CXX_COMPILER}

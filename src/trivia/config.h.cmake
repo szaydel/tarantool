@@ -47,6 +47,11 @@
  */
 #cmakedefine HAVE_CPUID 1
 
+/**
+ * Defined if strlcpy() string extension helper present.
+ */
+ #cmakedefine HAVE_STRLCPY 1
+
 /*
  * Defined if gcov instrumentation should be enabled.
  */
@@ -252,6 +257,8 @@
 #define CACHELINE_SIZE 64
 
 #cmakedefine ENABLE_FEEDBACK_DAEMON 1
+
+#cmakedefine EXPORT_LIBCURL_SYMBOLS 1
 
 /*
  * vim: syntax=c

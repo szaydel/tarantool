@@ -18,6 +18,8 @@ local tuple_encode = box.internal.tuple.encode
 local tuple_bless = box.internal.tuple.bless
 local is_tuple = box.tuple.is
 assert(tuple_encode ~= nil and tuple_bless ~= nil and is_tuple ~= nil)
+local cord_ibuf_take = buffer.internal.cord_ibuf_take
+local cord_ibuf_put = buffer.internal.cord_ibuf_put
 
 local INT64_MIN = tonumber64('-9223372036854775808')
 local INT64_MAX = tonumber64('9223372036854775807')
@@ -319,6 +321,12 @@ local function update_param_table(table, defaults)
     return new_table
 end
 
+local function feedback_save_event(event)
+    if internal.feedback_daemon ~= nil then
+        internal.feedback_daemon.save_event(event)
+    end
+end
+
 box.begin = function()
     if builtin.box_txn_begin() == -1 then
         box.error()
@@ -460,6 +468,8 @@ box.schema.space.create = function(name, options)
     })
     _space:insert{id, uid, name, options.engine, options.field_count,
         space_options, format}
+
+    feedback_save_event('create_space')
     return box.space[id], "created"
 end
 
@@ -529,6 +539,8 @@ box.schema.space.drop = function(space_id, space_name, opts)
             box.error(box.error.NO_SUCH_SPACE, space_name)
         end
     end
+
+    feedback_save_event('drop_space')
 end
 
 box.schema.space.rename = function(space_id, space_name)
@@ -713,7 +725,8 @@ local function update_index_parts(format, parts)
         box.error(box.error.ILLEGAL_PARAMS,
         "options.parts must have at least one part")
     end
-    if type(parts[1]) == 'number' and type(parts[2]) == 'string' then
+    if type(parts[1]) == 'number' and
+            (parts[2] == nil or type(parts[2]) == 'string') then
         if parts[3] == nil then
             parts = {parts} -- one part only
         else
@@ -723,7 +736,13 @@ local function update_index_parts(format, parts)
 
     local parts_can_be_simplified = true
     local result = {}
-    for i=1,#parts do
+    local i = 0
+    for _ in pairs(parts) do
+        i = i + 1
+        if parts[i] == nil then
+            box.error(box.error.ILLEGAL_PARAMS,
+                    "options.parts: unexpected option(s)")
+        end
         local part = {}
         if type(parts[i]) ~= "table" then
             part.field = parts[i]
@@ -747,6 +766,14 @@ local function update_index_parts(format, parts)
                     part[k] = coll[1]
                     parts_can_be_simplified = false
                 elseif k == 'is_nullable' then
+                    part[k] = v
+                    parts_can_be_simplified = false
+                elseif k == 'exclude_null' then
+                    if type(v) ~= 'boolean' then
+                        box.error(box.error.ILLEGAL_PARAMS,
+                                "options.parts[" .. i .. "]: " ..
+                                "type (boolean) is expected")
+                    end
                     part[k] = v
                     parts_can_be_simplified = false
                 else
@@ -785,6 +812,14 @@ local function update_index_parts(format, parts)
             box.error(box.error.ILLEGAL_PARAMS,
                       "options.parts[" .. i .. "]: type (boolean) is expected")
         end
+        if (not part.is_nullable) and part.exclude_null then
+            if part.is_nullable ~= nil then
+                box.error(box.error.ILLEGAL_PARAMS,
+                       "options.parts[" .. i .. "]: exclude_null=true and " ..
+                       "is_nullable=false are incompatible")
+            end
+            part.is_nullable = true
+        end
         if part.action == nil then
             if fmt and fmt.action ~= nil then
                 part.action = fmt.action
@@ -811,12 +846,13 @@ end
 
 --
 -- Convert index parts into 1.6.6 format if they
--- doesn't use collation and is_nullable options
+-- don't use collation, is_nullable and exclude_null options
 --
 local function simplify_index_parts(parts)
     local new_parts = {}
     for i, part in pairs(parts) do
-        assert(part.collation == nil and part.is_nullable == nil,
+        assert(part.collation == nil and part.is_nullable == nil
+                and part.exclude_null == nil,
                "part is simple")
         new_parts[i] = {part.field, part.type}
     end
@@ -1211,6 +1247,8 @@ box.schema.index.create = function(space_id, name, options)
         local _func_index = box.space[box.schema.FUNC_INDEX_ID]
         _func_index:insert{space_id, iid, index_opts.func}
     end
+
+    feedback_save_event('create_index')
     return space.index[name]
 end
 
@@ -1231,6 +1269,8 @@ box.schema.index.drop = function(space_id, index_id)
         _func_index:delete({v.space_id, v.index_id})
     end
     _index:delete{space_id, index_id}
+
+    feedback_save_event('drop_index')
 end
 
 box.schema.index.rename = function(space_id, index_id, name)
@@ -1761,9 +1801,12 @@ base_index_mt.__len = base_index_mt.len
 -- min and max
 base_index_mt.min_ffi = function(index, key)
     check_index_arg(index, 'min')
-    local pkey, pkey_end = tuple_encode(key)
-    if builtin.box_index_min(index.space_id, index.id,
-                             pkey, pkey_end, ptuple) ~= 0 then
+    local ibuf = cord_ibuf_take()
+    local pkey, pkey_end = tuple_encode(ibuf, key)
+    local nok = builtin.box_index_min(index.space_id, index.id, pkey, pkey_end,
+                                      ptuple) ~= 0
+    cord_ibuf_put(ibuf)
+    if nok then
         box.error() -- error
     elseif ptuple[0] ~= nil then
         return tuple_bless(ptuple[0])
@@ -1778,9 +1821,12 @@ base_index_mt.min_luac = function(index, key)
 end
 base_index_mt.max_ffi = function(index, key)
     check_index_arg(index, 'max')
-    local pkey, pkey_end = tuple_encode(key)
-    if builtin.box_index_max(index.space_id, index.id,
-                             pkey, pkey_end, ptuple) ~= 0 then
+    local ibuf = cord_ibuf_take()
+    local pkey, pkey_end = tuple_encode(ibuf, key)
+    local nok = builtin.box_index_max(index.space_id, index.id, pkey, pkey_end,
+                                      ptuple) ~= 0
+    cord_ibuf_put(ibuf)
+    if nok then
         box.error() -- error
     elseif ptuple[0] ~= nil then
         return tuple_bless(ptuple[0])
@@ -1813,10 +1859,12 @@ end
 -- iteration
 base_index_mt.pairs_ffi = function(index, key, opts)
     check_index_arg(index, 'pairs')
-    local pkey, pkey_end = tuple_encode(key)
+    local ibuf = cord_ibuf_take()
+    local pkey, pkey_end = tuple_encode(ibuf, key)
     local itype = check_iterator_type(opts, pkey + 1 >= pkey_end);
 
     local keybuf = ffi.string(pkey, pkey_end - pkey)
+    cord_ibuf_put(ibuf)
     local pkeybuf = ffi.cast('const char *', keybuf)
     local cdata = builtin.box_index_iterator(index.space_id, index.id,
         itype, pkeybuf, pkeybuf + #keybuf);
@@ -1840,10 +1888,12 @@ end
 -- index subtree size
 base_index_mt.count_ffi = function(index, key, opts)
     check_index_arg(index, 'count')
-    local pkey, pkey_end = tuple_encode(key)
+    local ibuf = cord_ibuf_take()
+    local pkey, pkey_end = tuple_encode(ibuf, key)
     local itype = check_iterator_type(opts, pkey + 1 >= pkey_end);
     local count = builtin.box_index_count(index.space_id, index.id,
         itype, pkey, pkey_end);
+    cord_ibuf_put(ibuf)
     if count == -1 then
         box.error()
     end
@@ -1858,9 +1908,12 @@ end
 
 base_index_mt.get_ffi = function(index, key)
     check_index_arg(index, 'get')
-    local key, key_end = tuple_encode(key)
-    if builtin.box_index_get(index.space_id, index.id,
-                             key, key_end, ptuple) ~= 0 then
+    local ibuf = cord_ibuf_take()
+    local key, key_end = tuple_encode(ibuf, key)
+    local nok = builtin.box_index_get(index.space_id, index.id, key, key_end,
+                                      ptuple) ~= 0
+    cord_ibuf_put(ibuf)
+    if nok then
         return box.error() -- error
     elseif ptuple[0] ~= nil then
         return tuple_bless(ptuple[0])
@@ -1891,13 +1944,15 @@ end
 
 base_index_mt.select_ffi = function(index, key, opts)
     check_index_arg(index, 'select')
-    local key, key_end = tuple_encode(key)
+    local ibuf = cord_ibuf_take()
+    local key, key_end = tuple_encode(ibuf, key)
     local iterator, offset, limit = check_select_opts(opts, key + 1 >= key_end)
 
     local port = ffi.cast('struct port *', port_c)
-
-    if builtin.box_select(index.space_id, index.id,
-        iterator, offset, limit, key, key_end, port) ~= 0 then
+    local nok = builtin.box_select(index.space_id, index.id, iterator, offset,
+                                   limit, key, key_end, port) ~= 0
+    cord_ibuf_put(ibuf)
+    if nok then
         return box.error()
     end
 
@@ -2193,7 +2248,7 @@ sequence_mt.next = function(self)
 end
 
 sequence_mt.current = function(self)
-    local ai64 = buffer.reg1.ai64
+    local ai64 = ffi.new('int64_t[1]')
     local rc = builtin.box_sequence_current(self.id, ai64)
     if rc < 0 then
         box.error(box.error.last())
@@ -2684,9 +2739,12 @@ box.schema.user = {}
 
 box.schema.user.password = function(password)
     local BUF_SIZE = 128
-    local buf = buffer.static_alloc('char', BUF_SIZE)
+    local ibuf = cord_ibuf_take()
+    local buf = ibuf:alloc(BUF_SIZE)
     builtin.password_prepare(password, #password, buf, BUF_SIZE)
-    return ffi.string(buf)
+    buf = ffi.string(buf)
+    cord_ibuf_put(ibuf)
+    return buf
 end
 
 local function chpasswd(uid, new_password)

@@ -1,3 +1,5 @@
+fiber = require('fiber')
+swim = require('swim')
 test_run = require('test_run').new()
 test_run:cmd("push filter '\\.lua.*:[0-9]+: ' to '.lua:<line>: '")
 test_run:cmd("push filter '127.0.0.1:[0-9]+$' to '127.0.0.1:<port>'")
@@ -157,6 +159,9 @@ s.is_dropped()
 
 s1:member_by_uuid(uuid(1)) ~= nil
 s1:member_by_uuid(50)
+-- gh-5951: could crash with no arguments or NULL.
+s1:member_by_uuid()
+s1:member_by_uuid(box.NULL)
 s1:member_by_uuid(uuid(2))
 
 -- UUID can be cdata.
